@@ -2623,21 +2623,35 @@ HELP_PAGES = {
     "inicio": {
         "title": "📖 Menú de ayuda",
         "description": (
-            "Selecciona una categoría con los botones de abajo. "
-            "Aquí solo verás comandos; no hay enlaces de soporte ni votos."
+            "Hey! 👋\n"
+            "Total comandos: {cmd_count}\n"
+            "Servidor: {guild_name}\n"
+            "Miembros: {member_count}"
         ),
         "fields": [
-            {"name": "🌐 General", "value": "Comandos de utilidad y consulta", "inline": False},
-            {"name": "🛡️ AntiNuke", "value": "Configuración y panel AntiNuke", "inline": False},
-            {"name": "⚠️ Warns", "value": "Advertencias y control de usuarios", "inline": False},
-            {"name": "🔒 Moderación", "value": "Sanciones, limpieza y moderación", "inline": False},
-            {"name": "🔒 Canales", "value": "Administración de canales y permisos", "inline": False},
-            {"name": "🎭 Roles", "value": "Roles, anuncios y mensajes embebidos", "inline": False},
-            {"name": "🎰 Juegos", "value": "Entretenimiento, trivia y sorteos", "inline": False},
-            {"name": "🎭 Roleplay", "value": "Comandos sociales y de interacción", "inline": False},
-            {"name": "🔮 Fun", "value": "Diversión y contenido ligero", "inline": False},
-            {"name": "🎂 Cumpleaños", "value": "Eventos y recordatorios", "inline": False},
-            {"name": "⚙️ Config", "value": "Ajustes del bot", "inline": False},
+            {
+                "name": "Categorías",
+                "value": (
+                    "🔴 General\n"
+                    "🛡️ AntiNuke\n"
+                    "⚠️ Warns\n"
+                    "🔒 Moderación\n"
+                    "🔒 Canales"
+                ),
+                "inline": True
+            },
+            {
+                "name": "Más categorías",
+                "value": (
+                    "🎭 Roles\n"
+                    "🎰 Juegos\n"
+                    "🎭 Roleplay\n"
+                    "🔮 Fun\n"
+                    "🎂 Cumpleaños\n"
+                    "⚙️ Config"
+                ),
+                "inline": True
+            }
         ]
     },
     "general": {
@@ -2831,15 +2845,24 @@ class HelpMenuView(discord.ui.View):
 
     def create_embed(self, page: str) -> discord.Embed:
         page_data = HELP_PAGES.get(page, HELP_PAGES["inicio"])
+        guild = self.ctx.guild
+        description = page_data.get("description", "")
+        if page == "inicio" and guild:
+            description = description.format(
+                cmd_count=len(bot.commands),
+                guild_name=guild.name,
+                member_count=guild.member_count,
+            )
         embed = discord.Embed(
             title=page_data["title"],
-            description=page_data.get("description", ""),
+            description=description,
             color=discord.Color.red(),
         )
-        guild = self.ctx.guild
         if guild:
             icon_url = guild.icon.url if guild.icon else None
             embed.set_author(name=guild.name, icon_url=icon_url)
+            if bot.user and bot.user.avatar:
+                embed.set_thumbnail(url=bot.user.avatar.url)
         for field in page_data["fields"]:
             embed.add_field(name=field["name"], value=field["value"].format(p=PREFIX), inline=field["inline"])
         embed.set_footer(text=f"by koss | {guild.name if guild else 'servidor desconocido'} | {PREFIX}ayuda")
