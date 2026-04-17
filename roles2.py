@@ -2624,7 +2624,7 @@ HELP_PAGES = {
         "title": "📖 Menú de ayuda",
         "description": (
             "Selecciona una categoría con los botones de abajo. "
-            "Usa el botón de 'Ayuda comando' para armar un comando rápido."
+            "Aquí solo verás comandos; no hay enlaces de soporte ni votos."
         ),
         "fields": [
             {"name": "🌐 General", "value": "Comandos de utilidad y consulta", "inline": False},
@@ -2834,7 +2834,7 @@ class HelpMenuView(discord.ui.View):
         embed = discord.Embed(
             title=page_data["title"],
             description=page_data.get("description", ""),
-            color=discord.Color.blurple(),
+            color=discord.Color.red(),
         )
         guild = self.ctx.guild
         if guild:
@@ -2842,7 +2842,7 @@ class HelpMenuView(discord.ui.View):
             embed.set_author(name=guild.name, icon_url=icon_url)
         for field in page_data["fields"]:
             embed.add_field(name=field["name"], value=field["value"].format(p=PREFIX), inline=field["inline"])
-        embed.set_footer(text=f"Comando: {PREFIX}ayuda | Bot en {guild.name if guild else 'servidor desconocido'}")
+        embed.set_footer(text=f"by koss | {guild.name if guild else 'servidor desconocido'} | {PREFIX}ayuda")
         return embed
 
     async def update_message(self, interaction: discord.Interaction, page: str):
@@ -2850,59 +2850,55 @@ class HelpMenuView(discord.ui.View):
         embed = self.create_embed(page)
         await interaction.response.edit_message(embed=embed, view=self)
 
-    @discord.ui.button(label="Inicio", style=discord.ButtonStyle.secondary, row=0)
+    @discord.ui.button(label="🔴 Inicio", style=discord.ButtonStyle.danger, row=0)
     async def btn_inicio(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "inicio")
 
-    @discord.ui.button(label="General", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="🔴 General", style=discord.ButtonStyle.danger, row=0)
     async def btn_general(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "general")
 
-    @discord.ui.button(label="AntiNuke", style=discord.ButtonStyle.primary, row=0)
+    @discord.ui.button(label="🔴 AntiNuke", style=discord.ButtonStyle.danger, row=0)
     async def btn_antinuke(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "antinuke")
 
-    @discord.ui.button(label="Warns", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="🔴 Warns", style=discord.ButtonStyle.danger, row=1)
     async def btn_warns(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "warns")
 
-    @discord.ui.button(label="Moderación", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="🔴 Moderación", style=discord.ButtonStyle.danger, row=1)
     async def btn_moderacion(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "moderacion")
 
-    @discord.ui.button(label="Canales", style=discord.ButtonStyle.primary, row=1)
+    @discord.ui.button(label="🔴 Canales", style=discord.ButtonStyle.danger, row=1)
     async def btn_canales(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "canales")
 
-    @discord.ui.button(label="Roles", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="🔴 Roles", style=discord.ButtonStyle.danger, row=2)
     async def btn_roles(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "roles")
 
-    @discord.ui.button(label="Juegos", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="🔴 Juegos", style=discord.ButtonStyle.danger, row=2)
     async def btn_juegos(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "juegos")
 
-    @discord.ui.button(label="Roleplay", style=discord.ButtonStyle.primary, row=2)
+    @discord.ui.button(label="🔴 Roleplay", style=discord.ButtonStyle.danger, row=2)
     async def btn_roleplay(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "roleplay")
 
-    @discord.ui.button(label="Fun", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label="🔴 Fun", style=discord.ButtonStyle.danger, row=3)
     async def btn_fun(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "fun")
 
-    @discord.ui.button(label="Cumpleaños", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label="🔴 Cumpleaños", style=discord.ButtonStyle.danger, row=3)
     async def btn_cumple(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "cumple")
 
-    @discord.ui.button(label="Config", style=discord.ButtonStyle.primary, row=3)
+    @discord.ui.button(label="🔴 Config", style=discord.ButtonStyle.danger, row=3)
     async def btn_config(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.update_message(interaction, "config")
 
-    @discord.ui.button(label="Ayuda comando", style=discord.ButtonStyle.success, row=4)
-    async def btn_command_help(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.send_modal(HelpCommandModal(PREFIX))
-
-    @discord.ui.button(label="Cerrar", style=discord.ButtonStyle.danger, row=4)
+    @discord.ui.button(label="🔴 Cerrar", style=discord.ButtonStyle.danger, row=4)
     async def btn_close(self, interaction: discord.Interaction, button: discord.ui.Button):
         for item in self.children:
             item.disabled = True
