@@ -2630,19 +2630,13 @@ HELP_PAGES = {
         ),
         "fields": [
             {
-                "name": "Categorías",
+                "name": "Categorías disponibles",
                 "value": (
                     "🔴 General\n"
                     "🛡️ AntiNuke\n"
                     "⚠️ Warns\n"
                     "🔒 Moderación\n"
-                    "🔒 Canales"
-                ),
-                "inline": True
-            },
-            {
-                "name": "Más categorías",
-                "value": (
+                    "🔒 Canales\n"
                     "🎭 Roles\n"
                     "🎰 Juegos\n"
                     "🎭 Roleplay\n"
@@ -2650,7 +2644,12 @@ HELP_PAGES = {
                     "🎂 Cumpleaños\n"
                     "⚙️ Config"
                 ),
-                "inline": True
+                "inline": False
+            },
+            {
+                "name": "Uso",
+                "value": "Presiona un botón para abrir la categoría deseada.",
+                "inline": False
             }
         ]
     },
