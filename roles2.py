@@ -2619,324 +2619,83 @@ for _a, _i in ANIME_ACCIONES.items():
 #  📖 AYUDA
 # ═════════════════════════════════════════════════════════════
 
-HELP_PAGES = {
-    "inicio": {
-        "title": "📖 Menú de ayuda",
-        "description": (
-            "Hey! 👋\n"
-            "Total comandos: {cmd_count}\n"
-            "Servidor: {guild_name}\n"
-            "Miembros: {member_count}"
-        ),
-        "fields": [
-            {
-                "name": "Categorías disponibles",
-                "value": (
-                    "🔴 General\n"
-                    "🛡️ AntiNuke\n"
-                    "⚠️ Warns\n"
-                    "🔒 Moderación\n"
-                    "🔒 Canales\n"
-                    "🎭 Roles\n"
-                    "🎰 Juegos\n"
-                    "🎭 Roleplay\n"
-                    "🔮 Fun\n"
-                    "🎂 Cumpleaños\n"
-                    "⚙️ Config"
-                ),
-                "inline": False
-            },
-            {
-                "name": "Uso",
-                "value": "Presiona un botón para abrir la categoría deseada.",
-                "inline": False
-            }
-        ]
-    },
-    "general": {
-        "title": "🌐 Generales",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}ping` `{p}avatar` `{p}banner` `{p}userinfo` `{p}serverinfo` `{p}stats` `{p}botinfo`\n"
-                "`{p}clima <ciudad>` `{p}tr <idioma> <texto>` `{p}calc <expr>` `{p}color <hex>`\n"
-                "`{p}buscar <texto>` `{p}rng [min] [max]` `{p}recordar <tiempo> <msg>`\n"
-                "`{p}sugerencia <txt>` `{p}reporte @user <razón>` `{p}invitar`") , "inline": False}
-        ]
-    },
-    "antinuke": {
-        "title": "🛡️ AntiNuke",
-        "fields": [
-            {"name": "Comandos AntiNuke", "value": (
-                "`{p}antinuke` — Panel completo\n"
-                "`{p}an_ayuda` — Todos los comandos AntiNuke\n"
-                "AntiRaid | AntiLinks | AntiSpam | AntiBot | Verificación"), "inline": False}
-        ]
-    },
-    "warns": {
-        "title": "⚠️ Warns",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}warn @u <razón>` `{p}warns [@u]` `{p}clearwarns @u` `{p}delwarn @u <n>`"), "inline": False}
-        ]
-    },
-    "moderacion": {
-        "title": "🔒 Moderación",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}ban @u` `{p}unban <user>` `{p}kick @u` `{p}mute @u [min]` `{p}unmute @u`\n"
-                "`{p}limpiar [n]` `{p}limpiar_bots` `{p}limpiar_usuario @u`\n"
-                "`{p}nick @u <nuevo>` `{p}massnick <nick>`"), "inline": False}
-        ]
-    },
-    "canales": {
-        "title": "🔒 Canales",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}lock` `{p}unlock` `{p}lockall` `{p}unlockall`\n"
-                "`{p}hide` `{p}show` `{p}slowmode [s]` `{p}topic <txt>`\n"
-                "`{p}cc <nombre>` `{p}ec` `{p}rc <nombre>` `{p}clone` `{p}nsfw`"), "inline": False}
-        ]
-    },
-    "roles": {
-        "title": "🎭 Roles",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}dr @u <rol>` — Dar rol (busca por nombre)\n"
-                "`{p}qr @u <rol>` — Quitar rol\n"
-                "`{p}cr #color <nombre>` `{p}er <nombre>` `{p}lroles`\n"
-                "`{p}ru [@u]` `{p}ann [#c] <msg>` `{p}emb [#c] \"titulo\" <msg>`\n"
-                "`{p}v @u` — Dar acceso /arn"), "inline": False}
-        ]
-    },
-    "juegos": {
-        "title": "🎰 Juegos",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}trivia` `{p}adivina [max]` `{p}acertijo`\n"
-                "`{p}tor [@u]` — Verdad o Reto\n"
-                "`{p}dado [lados]` `{p}dp [n] [lados]` `{p}moneda`\n"
-                "`{p}ruleta op1 op2...` `{p}8ball <preg>` `{p}piedra`"), "inline": False}
-        ]
-    },
-    "roleplay": {
-        "title": "🎭 Roleplay",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}casar @u` `{p}aceptar` `{p}rechazar` `{p}divorcio` `{p}pareja`\n"
-                "`{p}adoptar @u` `{p}familia`"), "inline": False}
-        ]
-    },
-    "fun": {
-        "title": "🔮 Fun",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}horoscopo <signo>` `{p}personalidad` `{p}compatibilidad @u`\n"
-                "`{p}fp [personaje]` `{p}pl` — Frases anime\n"
-                "`{p}frase` `{p}chiste` `{p}meme`"), "inline": False}
-        ]
-    },
-    "cumple": {
-        "title": "🎂 Cumpleaños y Recordatorios",
-        "fields": [
-            {"name": "Comandos", "value": (
-                "`{p}cumple [DD/MM]` `{p}cumple_ver [@u]` `{p}cumples_lista`\n"
-                "`{p}recordar <10m/2h/30s> <msg>`"), "inline": False}
-        ]
-    },
-    "config": {
-        "title": "⚙️ Config",
-        "fields": [
-            {"name": "Comandos", "value": "`{p}setprefix <nuevo>` — Cambiar prefijo", "inline": False}
-        ]
-    },
-}
-
-COMMAND_TEMPLATES = {
-    "mute": "{p}mute @usuario <duración> <razón>",
-    "ban": "{p}ban @usuario <razón>",
-    "kick": "{p}kick @usuario <razón>",
-    "warn": "{p}warn @usuario <razón>",
-    "dr": "{p}dr @usuario <rol>",
-    "qr": "{p}qr @usuario <rol>",
-    "cr": "{p}cr #color <nombre>",
-    "er": "{p}er <nombre>",
-    "an_ayuda": "{p}an_ayuda",
-    "antinuke": "{p}antinuke",
-    "setprefix": "{p}setprefix <nuevo>",
-}
-
-class HelpCommandModal(discord.ui.Modal, title="Ayuda de comando"):
-    def __init__(self, prefix: str):
-        super().__init__()
-        self.prefix = prefix
-        self.command = discord.ui.TextInput(
-            label="Comando",
-            placeholder="mute, ban, dr, qr, etc.",
-            required=True,
-            max_length=32,
-        )
-        self.target = discord.ui.TextInput(
-            label="Usuario / Rol",
-            placeholder="@usuario o nombre de rol (opcional)",
-            required=False,
-            max_length=100,
-        )
-        self.duration = discord.ui.TextInput(
-            label="Duración",
-            placeholder="10m, 1h, etc. (opcional)",
-            required=False,
-            max_length=32,
-        )
-        self.reason = discord.ui.TextInput(
-            label="Razón",
-            placeholder="Spam, mal comportamiento, etc. (opcional)",
-            required=False,
-            style=discord.TextStyle.long,
-            max_length=200,
-        )
-        self.add_item(self.command)
-        self.add_item(self.target)
-        self.add_item(self.duration)
-        self.add_item(self.reason)
-
-    async def on_submit(self, interaction: discord.Interaction):
-        cmd = self.command.value.strip().lower()
-        target = self.target.value.strip()
-        duration = self.duration.value.strip()
-        reason = self.reason.value.strip()
-        base = COMMAND_TEMPLATES.get(cmd, f"{self.prefix}{cmd}")
-        if base.endswith("<razón>") and not reason:
-            example = f"{base}" if target or duration else base
-        else:
-            example = base
-        parts = [self.prefix + cmd]
-        if target:
-            parts.append(target)
-        if duration:
-            parts.append(duration)
-        if reason:
-            parts.append(reason)
-        if len(parts) > 1:
-            example = " ".join(parts)
-
-        embed = discord.Embed(
-            title="📝 Comando sugerido",
-            description=f"`{example}`",
-            color=discord.Color.blue(),
-        )
-        embed.add_field(
-            name="Siguiente paso",
-            value="Copia el comando y pégalo en el chat, o usa la categoría para ver más opciones.",
-            inline=False,
-        )
-        await interaction.response.send_message(embed=embed, ephemeral=True)
-
-    async def on_error(self, interaction: discord.Interaction, error: Exception) -> None:
-        await interaction.response.send_message(
-            "❌ Ocurrió un error al generar el comando.", ephemeral=True
-        )
-
-class HelpMenuView(discord.ui.View):
-    def __init__(self, ctx: commands.Context):
-        super().__init__(timeout=180)
-        self.ctx = ctx
-        self.current_page = "inicio"
-
-    def create_embed(self, page: str) -> discord.Embed:
-        page_data = HELP_PAGES.get(page, HELP_PAGES["inicio"])
-        guild = self.ctx.guild
-        description = page_data.get("description", "")
-        if page == "inicio" and guild:
-            description = description.format(
-                cmd_count=len(bot.commands),
-                guild_name=guild.name,
-                member_count=guild.member_count,
-            )
-        embed = discord.Embed(
-            title=page_data["title"],
-            description=description,
-            color=discord.Color.red(),
-        )
-        if guild:
-            icon_url = guild.icon.url if guild.icon else None
-            embed.set_author(name=guild.name, icon_url=icon_url)
-            if bot.user and bot.user.avatar:
-                embed.set_thumbnail(url=bot.user.avatar.url)
-        for field in page_data["fields"]:
-            embed.add_field(name=field["name"], value=field["value"].format(p=PREFIX), inline=field["inline"])
-        embed.set_footer(text=f"by koss | {guild.name if guild else 'servidor desconocido'} | {PREFIX}ayuda")
-        return embed
-
-    async def update_message(self, interaction: discord.Interaction, page: str):
-        self.current_page = page
-        embed = self.create_embed(page)
-        await interaction.response.edit_message(embed=embed, view=self)
-
-    @discord.ui.button(label="🔴 Inicio", style=discord.ButtonStyle.danger, row=0)
-    async def btn_inicio(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "inicio")
-
-    @discord.ui.button(label="🔴 General", style=discord.ButtonStyle.danger, row=0)
-    async def btn_general(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "general")
-
-    @discord.ui.button(label="🔴 AntiNuke", style=discord.ButtonStyle.danger, row=0)
-    async def btn_antinuke(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "antinuke")
-
-    @discord.ui.button(label="🔴 Warns", style=discord.ButtonStyle.danger, row=1)
-    async def btn_warns(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "warns")
-
-    @discord.ui.button(label="🔴 Moderación", style=discord.ButtonStyle.danger, row=1)
-    async def btn_moderacion(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "moderacion")
-
-    @discord.ui.button(label="🔴 Canales", style=discord.ButtonStyle.danger, row=1)
-    async def btn_canales(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "canales")
-
-    @discord.ui.button(label="🔴 Roles", style=discord.ButtonStyle.danger, row=2)
-    async def btn_roles(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "roles")
-
-    @discord.ui.button(label="🔴 Juegos", style=discord.ButtonStyle.danger, row=2)
-    async def btn_juegos(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "juegos")
-
-    @discord.ui.button(label="🔴 Roleplay", style=discord.ButtonStyle.danger, row=2)
-    async def btn_roleplay(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "roleplay")
-
-    @discord.ui.button(label="🔴 Fun", style=discord.ButtonStyle.danger, row=3)
-    async def btn_fun(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "fun")
-
-    @discord.ui.button(label="🔴 Cumpleaños", style=discord.ButtonStyle.danger, row=3)
-    async def btn_cumple(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "cumple")
-
-    @discord.ui.button(label="🔴 Config", style=discord.ButtonStyle.danger, row=3)
-    async def btn_config(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.update_message(interaction, "config")
-
-    @discord.ui.button(label="🔴 Cerrar", style=discord.ButtonStyle.danger, row=4)
-    async def btn_close(self, interaction: discord.Interaction, button: discord.ui.Button):
-        for item in self.children:
-            item.disabled = True
-        await interaction.response.edit_message(content="❌ Menú de ayuda cerrado.", embed=self.create_embed(self.current_page), view=self)
-
-    async def on_timeout(self):
-        for item in self.children:
-            item.disabled = True
-        if self.message:
-            await self.message.edit(view=self)
-
 @bot.command(name="ayuda", aliases=["help","h","comandos"])
 async def ayuda(ctx):
-    view = HelpMenuView(ctx)
-    embed = view.create_embed("inicio")
-    await ctx.send(embed=embed, view=view)
+    p = PREFIX
+    embed = discord.Embed(
+        title="📖 Comandos del Bot",
+        description=f"Prefix: `{p}` — Bot multipropósito con moderación, AntiNuke, juegos y más",
+        color=discord.Color.blurple()
+    )
+    embed.add_field(name="🌐 Generales",
+        value=(
+            f"`{p}ping` `{p}avatar` `{p}banner` `{p}userinfo` `{p}serverinfo` `{p}stats` `{p}botinfo`\n"
+            f"`{p}clima <ciudad>` `{p}tr <idioma> <texto>` `{p}calc <expr>` `{p}color <hex>`\n"
+            f"`{p}buscar <texto>` `{p}rng [min] [max]` `{p}recordar <tiempo> <msg>`\n"
+            f"`{p}sugerencia <txt>` `{p}reporte @user <razón>` `{p}invitar`"
+        ), inline=False)
+    embed.add_field(name="🛡️ AntiNuke (Owner)",
+        value=(
+            f"`{p}antinuke` — Panel completo\n"
+            f"`{p}an_ayuda` — Todos los comandos AntiNuke\n"
+            f"AntiRaid | AntiLinks | AntiSpam | AntiBot | Verificación"
+        ), inline=False)
+    embed.add_field(name="⚠️ Warns (Staff)",
+        value=f"`{p}warn @u <razón>` `{p}warns [@u]` `{p}clearwarns @u` `{p}delwarn @u <n>`",
+        inline=False)
+    embed.add_field(name="🔒 Moderación (Admin)",
+        value=(
+            f"`{p}ban @u` `{p}unban <user>` `{p}kick @u` `{p}mute @u [min]` `{p}unmute @u`\n"
+            f"`{p}limpiar [n]` `{p}limpiar_bots` `{p}limpiar_usuario @u`\n"
+            f"`{p}nick @u <nuevo>` `{p}massnick <nick>`"
+        ), inline=False)
+    embed.add_field(name="🔒 Canales (Admin)",
+        value=(
+            f"`{p}lock` `{p}unlock` `{p}lockall` `{p}unlockall`\n"
+            f"`{p}hide` `{p}show` `{p}slowmode [s]` `{p}topic <txt>`\n"
+            f"`{p}cc <nombre>` `{p}ec` `{p}rc <nombre>` `{p}clone` `{p}nsfw`"
+        ), inline=False)
+    embed.add_field(name="🎭 Roles (Admin)",
+        value=(
+            f"`{p}dr @u <rol>` — Dar rol (busca por nombre)\n"
+            f"`{p}qr @u <rol>` — Quitar rol\n"
+            f"`{p}cr #color <nombre>` `{p}er <nombre>` `{p}lroles`\n"
+            f"`{p}ru [@u]` `{p}ann [#c] <msg>` `{p}emb [#c] \"titulo\" <msg>`\n"
+            f"`{p}v @u` — Dar acceso /arn"
+        ), inline=False)
+    embed.add_field(name="🎰 Juegos",
+        value=(
+            f"`{p}trivia` `{p}adivina [max]` `{p}acertijo`\n"
+            f"`{p}tor [@u]` — Verdad o Reto\n"
+            f"`{p}dado [lados]` `{p}dp [n] [lados]` `{p}moneda`\n"
+            f"`{p}ruleta op1 op2...` `{p}8ball <preg>` `{p}piedra`"
+        ), inline=False)
+    embed.add_field(name="🎁 Sorteos y Encuestas (Staff)",
+        value=f"`{p}sorteo <seg> <premio>` `{p}encuesta <preg> | op1 | op2` `{p}encuesta_si_no <preg>`",
+        inline=False)
+    embed.add_field(name="🎭 Roleplay",
+        value=(
+            f"`{p}casar @u` `{p}aceptar` `{p}rechazar` `{p}divorcio` `{p}pareja`\n"
+            f"`{p}adoptar @u` `{p}familia`"
+        ), inline=False)
+    embed.add_field(name="🔮 Fun",
+        value=(
+            f"`{p}horoscopo <signo>` `{p}personalidad` `{p}compatibilidad @u`\n"
+            f"`{p}fp [personaje]` `{p}pl` — Frases anime\n"
+            f"`{p}frase` `{p}chiste` `{p}meme`"
+        ), inline=False)
+    embed.add_field(name="🐱 Anime",
+        value=f"`{p}abrazar` `{p}pat` `{p}slap` `{p}kiss` `{p}poke` `{p}cuddle` `{p}bite` `{p}wave` `{p}dance` `{p}cry`",
+        inline=False)
+    embed.add_field(name="🎂 Cumpleaños y ⏰ Recordatorios",
+        value=(
+            f"`{p}cumple [DD/MM]` `{p}cumple_ver [@u]` `{p}cumples_lista`\n"
+            f"`{p}recordar <10m/2h/30s> <msg>`"
+        ), inline=False)
+    embed.add_field(name="⚙️ Config",
+        value=f"`{p}setprefix <nuevo>` — Cambiar prefijo",
+        inline=False)
+    await ctx.send(embed=embed)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -2947,7 +2706,7 @@ async def ayuda(ctx):
 async def on_ready():
     log.info(f"Bot conectado: {bot.user} (ID: {bot.user.id})")
     await bot.change_presence(
-        activity=discord.Activity(type=discord.ActivityType.watching, name=f"{PREFIX}ayuda / x&m ")
+        activity=discord.Activity(type=discord.ActivityType.watching, name=f"{PREFIX}ayuda | bot ss")
     )
 
 @bot.event
