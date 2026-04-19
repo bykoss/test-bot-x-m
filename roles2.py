@@ -153,22 +153,20 @@ async def on_ready():
     )
 
 # ─────────────────────────────────────────────────────────────
-#  EL RESTO DEL CÓDIGO (on_command_error, inicio, etc.)
+#  INICIO
 # ─────────────────────────────────────────────────────────────
-# (Todo lo que venía después del patch en tu archivo original se mantiene igual)
-
 if __name__ == "__main__":
-    while True:
+    if TOKEN:
         try:
             log.info("Iniciando bot...")
-            bot.run(TOKEN, reconnect=True)
+            bot.run(TOKEN)
         except discord.LoginFailure:
             log.critical("TOKEN INVÁLIDO")
             sys.exit(1)
         except KeyboardInterrupt:
-            log.info("Detenido.")
+            log.info("Bot detenido manualmente.")
             sys.exit(0)
-        except Exception:
-            log.error(f"Error:\n{traceback.format_exc()}")
-            log.info("Reiniciando en 5s...")
-            time.sleep(5)
+        except Exception as e:
+            log.error(f"Error crítico al iniciar: {e}")
+    else:
+        log.critical("No se encontró un TOKEN válido.")
