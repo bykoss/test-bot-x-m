@@ -656,9 +656,10 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
 @bot.command(name="antinuke")
 @commands.check(es_owner_an)
 async def antinuke_status(ctx):
-    cfg    = cargar_antinuke(ctx.guild.id)
+    cfg = cargar_antinuke(ctx.guild.id)
     estado = "✅ Activo" if cfg["activo"] else "❌ Desactivado"
 
+    # Obtener menciones de la whitelist
     wl = cfg.get("whitelist", [])
     wl_members = []
     for uid in wl:
@@ -667,27 +668,45 @@ async def antinuke_status(ctx):
             wl_members.append(m.mention)
     wl_txt = ", ".join(wl_members) if wl_members else "Nadie"
 
-    embed = discord.Embed(title="🛡️ AntiNuke — Panel Completo", color=0x00FF88 if cfg["activo"] else 0xFF0000)
-    embed.add_field(name="Estado",   value=estado,                            inline=True)
-    embed.add_field(name="Acción",   value=cfg.get("accion", "ban").upper(),  inline=True)
-    embed.add_field(name="Ventana",  value=f"{cfg.get('ventana', 10)}s",      inline=True)
+    # --- CREACIÓN DE LA INTERFAZ ---
+    embed = discord.Embed(
+        title="🛡️ AntiNuke — Panel Completo", 
+        color=0x00FF88 if cfg["activo"] else 0xFF0000
+    )
+
+    # Primera Fila (3 columnas)
+    embed.add_field(name="Estado", value=estado, inline=True)
+    embed.add_field(name="Acción", value=cfg.get("accion", "ban").upper(), inline=True)
+    embed.add_field(name="Ventana", value=f"{cfg.get('ventana', 10)}s", inline=True)
+
+    # Segunda Fila (Límites y Módulos)
     lim = cfg.get("limites", {})
-    embed.add_field(name="Límites",
-        value="\n".join(f"`{k}`: {v}" for k, v in lim.items()), inline=True)
+    lim_txt = "\n".join([f"`{k}`: {v}" for k, v in lim.items()])
+    embed.add_field(name="Límites", value=lim_txt if lim_txt else "No definidos", inline=True)
+
     ar  = cfg.get("antiraid", {})
     al  = cfg.get("antilinks", {})
     asp = cfg.get("antispam", {})
     ab  = cfg.get("antibot", {})
-    embed.add_field(name="Módulos",
-        value=(
-            f"AntiRaid: {'✅' if ar.get('activo') else '❌'}\n"
-            f"AntiLinks: {'✅' if al.get('activo') else '❌'}\n"
-            f"AntiSpam: {'✅' if asp.get('activo') else '❌'}\n"
-            f"AntiBot: {'✅' if ab.get('activo') else '❌'}"
-        ), inline=True)
+    
+    modulos_txt = (
+        f"AntiRaid: {'✅' if ar.get('activo') else '❌'}\n"
+        f"AntiLinks: {'✅' if al.get('activo') else '❌'}\n"
+        f"AntiSpam: {'✅' if asp.get('activo') else '❌'}\n"
+        f"AntiBot: {'✅' if ab.get('activo') else '❌'}"
+    )
+    embed.add_field(name="Módulos", value=modulos_txt, inline=True)
+
+    # Whitelist (Ancho completo)
     embed.add_field(name=f"Whitelist ({len(wl_members)})", value=wl_txt, inline=False)
+
+    # Canal de Logs (Ancho completo)
     log_ch = cfg.get("log_channel")
     embed.add_field(name="Canal logs", value=f"<#{log_ch}>" if log_ch else "No configurado", inline=False)
+
+    # Firma final (Marca personal)
+    embed.set_footer(text="by koss")
+    
     await ctx.send(embed=embed)
 
 @bot.command(name="an_ayuda")
