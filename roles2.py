@@ -1789,20 +1789,25 @@ async def massnick(ctx, *, nuevo: str):
 #  🔒 COMANDO !v — DAR ROL ARN (Solo Admin)
 # ═════════════════════════════════════════════════════════════
 
-ROLES_POR_SERVIDOR = {
-    1476763559982534829: {
-        "dar":    1477556485092544532,
-        "quitar": 1479630235283624049,
-    },
-    1473493322403414280: {
-        "dar":    1473493514770972922,
-        "quitar": None,
-    },
-    1480185559145250907: {
-        "dar":    1473493514770972922,
-        "quitar": None,
-    },
-}
+ROLES_V_FILE = "roles_v.json"
+
+def _cargar_roles_v() -> dict:
+    if os.path.exists(ROLES_V_FILE):
+        with open(ROLES_V_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return {int(k): v for k, v in data.items()}
+    # Valores iniciales migrados (se sobreescriben al usar !vconfig)
+    return {
+        1476763559982534829: {"dar": 1477556485092544532, "quitar": 1479630235283624049},
+        1473493322403414280: {"dar": 1473493514770972922, "quitar": None},
+        1480185559145250907: {"dar": 1473493514770972922, "quitar": None},
+    }
+
+def _guardar_roles_v(data: dict):
+    with open(ROLES_V_FILE, "w", encoding="utf-8") as f:
+        json.dump({str(k): v for k, v in data.items()}, f, indent=2, ensure_ascii=False)
+
+ROLES_POR_SERVIDOR: dict = _cargar_roles_v()
 
 class BuscarRolModal(discord.ui.Modal):
     def __init__(self, tipo: str, view):
@@ -1882,34 +1887,87 @@ class SeleccionarRolView(discord.ui.View):
         self.stop()
 
 
-class VerView(discord.ui.View):
-    def __init__(self, ctx, member: discord.Member):
+
+# ── Comando para configurar el rol de !v (se hace UNA vez y se guarda) ──────
+
+@bot.command(name="vconfig", aliases=["setrolv", "configurarv"])
+@commands.check(es_admin)
+async def vconfig(ctx):
+    """Configura el rol que se dará con !v @usuario. Solo se hace una vez."""
+    cfg_srv = ROLES_POR_SERVIDOR.get(ctx.guild.id, {})
+    dar_actual = cfg_srv.get("dar")
+    rol_actual_nombre = ctx.guild.get_role(dar_actual).name if dar_actual and ctx.guild.get_role(dar_actual) else "Sin configurar"
+
+    embed = discord.Embed(
+        title="⚙️ Configurar rol de verificación (!v)",
+        description=(
+            f"Configura el rol que se dará automáticamente al usar `{PREFIX}v @usuario`.\n\n"
+            f"🟢 **Cambiar rol a dar** — elige el rol que se dará\n"
+            f"🔴 **Cambiar rol a quitar** — rol que se quitará (opcional)\n\n"
+            f"Pulsa **✅ Guardar** cuando termines. Esta configuración se guarda permanentemente."
+        ),
+        color=discord.Color.blurple()
+    )
+    embed.add_field(name="🟢 Rol a dar actualmente", value=f"**{rol_actual_nombre}**", inline=False)
+
+    view = VConfigView(ctx)
+    msg = await ctx.send(embed=embed, view=view)
+    await view.wait()
+
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+    if not view.guardado:
+        return
+
+    # Guardar en memoria y en disco
+    ROLES_POR_SERVIDOR[ctx.guild.id] = {
+        "dar":    view.rol_dar_id,
+        "quitar": view.rol_quitar_id if view.rol_quitar_id != "ALL" else None,
+    }
+    _guardar_roles_v(ROLES_POR_SERVIDOR)
+
+    rol_dar = ctx.guild.get_role(view.rol_dar_id)
+    msg_ok = await ctx.send(
+        embed=discord.Embed(
+            title="✅ Configuración guardada",
+            description=(
+                f"El comando `{PREFIX}v @usuario` dará automáticamente el rol **{rol_dar.name if rol_dar else view.rol_dar_id}**.\n"
+                f"Ya no necesitas configurarlo cada vez."
+            ),
+            color=discord.Color.green()
+        )
+    )
+    await asyncio.sleep(10)
+    try:
+        await msg_ok.delete()
+    except Exception:
+        pass
+
+
+class VConfigView(discord.ui.View):
+    def __init__(self, ctx):
         super().__init__(timeout=60)
-        self.ctx    = ctx
-        self.member = member
-        self.confirmado    = False
+        self.ctx = ctx
+        self.guardado = False
         self.rol_dar_id    = ROLES_POR_SERVIDOR.get(ctx.guild.id, {}).get("dar")
-        self.rol_quitar_id = ROLES_POR_SERVIDOR.get(ctx.guild.id, {}).get("quitar", "ALL")
-        if self.rol_quitar_id is None:
-            self.rol_quitar_id = "ALL"
+        self.rol_quitar_id = ROLES_POR_SERVIDOR.get(ctx.guild.id, {}).get("quitar", None)
 
         btn_dar = discord.ui.Button(label="🟢 Cambiar rol a dar", style=discord.ButtonStyle.primary, row=0)
-        btn_dar.callback = self.cb_abrir_dar
+        btn_dar.callback = self.cb_dar
         self.add_item(btn_dar)
 
         btn_quitar = discord.ui.Button(label="🔴 Cambiar rol a quitar", style=discord.ButtonStyle.secondary, row=0)
-        btn_quitar.callback = self.cb_abrir_quitar
+        btn_quitar.callback = self.cb_quitar
         self.add_item(btn_quitar)
 
-        btn_todos = discord.ui.Button(label="🗑️ Quitar todos los roles", style=discord.ButtonStyle.secondary, row=1)
-        btn_todos.callback = self.cb_todos
-        self.add_item(btn_todos)
-
-        btn_ok = discord.ui.Button(label="✅ Confirmar", style=discord.ButtonStyle.success, row=2)
-        btn_ok.callback = self.cb_confirmar
+        btn_ok = discord.ui.Button(label="✅ Guardar", style=discord.ButtonStyle.success, row=1)
+        btn_ok.callback = self.cb_guardar
         self.add_item(btn_ok)
 
-        btn_cancel = discord.ui.Button(label="❌ Cancelar", style=discord.ButtonStyle.danger, row=2)
+        btn_cancel = discord.ui.Button(label="❌ Cancelar", style=discord.ButtonStyle.danger, row=1)
         btn_cancel.callback = self.cb_cancelar
         self.add_item(btn_cancel)
 
@@ -1919,19 +1977,18 @@ class VerView(discord.ui.View):
             return False
         return True
 
-    async def cb_abrir_dar(self, interaction: discord.Interaction):
+    async def cb_dar(self, interaction: discord.Interaction):
         await interaction.response.send_modal(BuscarRolModal("dar", self))
 
-    async def cb_abrir_quitar(self, interaction: discord.Interaction):
+    async def cb_quitar(self, interaction: discord.Interaction):
         await interaction.response.send_modal(BuscarRolModal("quitar", self))
 
-    async def cb_todos(self, interaction: discord.Interaction):
-        self.rol_quitar_id = "ALL"
-        await interaction.response.send_message("🗑️ Se quitarán **TODOS** los roles al confirmar.", ephemeral=True)
-
-    async def cb_confirmar(self, interaction: discord.Interaction):
+    async def cb_guardar(self, interaction: discord.Interaction):
+        if not self.rol_dar_id:
+            await interaction.response.send_message("❌ Debes configurar el **rol a dar** primero.", ephemeral=True)
+            return
         await interaction.response.defer()
-        self.confirmado = True
+        self.guardado = True
         self.stop()
 
     async def cb_cancelar(self, interaction: discord.Interaction):
@@ -1939,68 +1996,34 @@ class VerView(discord.ui.View):
         self.stop()
 
 
+# ── Comando !v — da el rol guardado directamente, sin panel ──────────────────
+
 @bot.command(name="v")
 @commands.check(es_admin)
 async def dar_rol_arn(ctx, member: discord.Member):
-    cfg_srv        = ROLES_POR_SERVIDOR.get(ctx.guild.id, {})
-    dar_default    = cfg_srv.get("dar")
-    quitar_default = cfg_srv.get("quitar")
-
-    rol_dar_nombre    = ctx.guild.get_role(dar_default).name    if dar_default    and ctx.guild.get_role(dar_default)    else "Sin configurar"
-    rol_quitar_nombre = ctx.guild.get_role(quitar_default).name if quitar_default and ctx.guild.get_role(quitar_default) else "Todos los roles"
-
-    embed = discord.Embed(
-        title="🔑 Dar Acceso — Configuración",
-        description=(
-            f"Configurando acceso para {member.mention}\n\n"
-            f"🟢 **Cambiar rol a dar** — escribe el nombre del rol\n"
-            f"🔴 **Cambiar rol a quitar** — escribe el nombre del rol\n"
-            f"🗑️ **Quitar todos** — elimina todos los roles del usuario\n\n"
-            f"O pulsa **✅ Confirmar** para usar los valores por defecto."
-        ),
-        color=discord.Color.blurple()
-    )
-    embed.set_thumbnail(url=member.display_avatar.url)
-    embed.add_field(name="👤 Usuario",           value=member.mention,              inline=True)
-    embed.add_field(name="🟢 Rol a dar",         value=f"**{rol_dar_nombre}**",     inline=True)
-    embed.add_field(name="🔴 Rol(es) a quitar",  value=f"**{rol_quitar_nombre}**",  inline=True)
-
-    view = VerView(ctx, member)
-    msg  = await ctx.send(embed=embed, view=view)
-    await view.wait()
-
-    try:
-        await msg.delete()
-    except Exception:
-        pass
-
-    if not view.confirmado:
-        return
-
-    rol_dar_id    = view.rol_dar_id
-    rol_quitar_id = view.rol_quitar_id
+    cfg_srv    = ROLES_POR_SERVIDOR.get(ctx.guild.id, {})
+    rol_dar_id = cfg_srv.get("dar")
 
     if not rol_dar_id:
-        return await ctx.send("❌ No hay rol configurado para dar. Selecciona uno en el menú.")
+        return await ctx.send(
+            f"❌ No hay rol configurado. Usa `{PREFIX}vconfig` para elegir el rol que se dará con `{PREFIX}v`."
+        )
 
     rol_dar = ctx.guild.get_role(rol_dar_id)
     if not rol_dar:
-        return await ctx.send("❌ No encontré el rol a dar.")
+        return await ctx.send(
+            f"❌ El rol configurado ya no existe en el servidor. Usa `{PREFIX}vconfig` para actualizarlo."
+        )
 
+    rol_quitar_id  = cfg_srv.get("quitar")
     roles_quitados = []
     roles_fallidos = []
 
-    if rol_quitar_id == "ALL":
-        roles_a_quitar = [
-            r for r in member.roles
-            if r != ctx.guild.default_role
-            and not r.managed
-            and r < ctx.guild.me.top_role
-            and r.id != rol_dar.id
-        ]
-    else:
+    if rol_quitar_id:
         r = ctx.guild.get_role(rol_quitar_id)
         roles_a_quitar = [r] if r and r in member.roles else []
+    else:
+        roles_a_quitar = []
 
     if roles_a_quitar:
         try:
@@ -2021,9 +2044,9 @@ async def dar_rol_arn(ctx, member: discord.Member):
 
     embed_ok = discord.Embed(title="✅ Acceso Concedido", color=discord.Color.green())
     embed_ok.set_thumbnail(url=member.display_avatar.url)
-    embed_ok.add_field(name="👤 Miembro",   value=member.mention,        inline=True)
-    embed_ok.add_field(name="✅ Rol dado",  value=f"**{rol_dar.name}**", inline=True)
-    embed_ok.add_field(name="✍️ Por",        value=ctx.author.mention,    inline=True)
+    embed_ok.add_field(name="👤 Miembro",  value=member.mention,        inline=True)
+    embed_ok.add_field(name="✅ Rol dado", value=f"**{rol_dar.name}**", inline=True)
+    embed_ok.add_field(name="✍️ Por",       value=ctx.author.mention,    inline=True)
     if roles_quitados:
         embed_ok.add_field(
             name=f"🗑️ Roles quitados ({len(roles_quitados)})",
@@ -2038,7 +2061,11 @@ async def dar_rol_arn(ctx, member: discord.Member):
         )
     msg_ok = await ctx.send(embed=embed_ok)
     await asyncio.sleep(15)
-    await msg_ok.delete()
+    try:
+        await msg_ok.delete()
+    except Exception:
+        pass
+
 
 @dar_rol_arn.error
 async def dar_rol_arn_error(ctx, error):
@@ -2656,7 +2683,8 @@ async def ayuda(ctx):
             f"`{p}qr @u <rol>` — Quitar rol\n"
             f"`{p}cr #color <nombre>` `{p}er <nombre>` `{p}lroles`\n"
             f"`{p}ru [@u]` `{p}ann [#c] <msg>` `{p}emb [#c] \"titulo\" <msg>`\n"
-            f"`{p}v @u` — Dar acceso /arn"
+            f"`{p}v @u` — Dar acceso (rol guardado)\n"
+            f"`{p}vconfig` — Configurar qué rol da `{p}v` (una sola vez)"
         ), inline=False)
     embed.add_field(name="🎰 Juegos",
         value=(
