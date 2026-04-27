@@ -2261,6 +2261,431 @@ async def setup_verify_error(ctx, error):
 
 
 # ═════════════════════════════════════════════════════════════
+#  🎮 ROBLOX VERIFICATION
+# ═════════════════════════════════════════════════════════════
+
+ROBLOX_FILE        = "roblox_config.json"
+ROBLOX_GROUP_ID    = 736418412
+ROBLOX_PENDING     = {}   # { guild_id: { discord_user_id: roblox_username } }
+
+def _cargar_roblox_cfg() -> dict:
+    if os.path.exists(ROBLOX_FILE):
+        with open(ROBLOX_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return {int(k): v for k, v in data.items()}
+    return {}
+
+def _guardar_roblox_cfg(data: dict):
+    with open(ROBLOX_FILE, "w", encoding="utf-8") as f:
+        json.dump({str(k): v for k, v in data.items()}, f, indent=2, ensure_ascii=False)
+
+ROBLOX_CFG: dict = _cargar_roblox_cfg()
+
+
+async def roblox_get_user_id(username: str) -> int | None:
+    """Obtiene el ID de Roblox a partir del username."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://users.roblox.com/v1/usernames/users",
+                json={"usernames": [username], "excludeBannedUsers": False}
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("data"):
+                        return data["data"][0]["id"]
+    except Exception as e:
+        log.error(f"[Roblox] Error obteniendo ID de {username}: {e}")
+    return None
+
+
+async def roblox_en_grupo(user_id: int, group_id: int) -> bool:
+    """Verifica si un usuario de Roblox está en el grupo."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://groups.roblox.com/v1/users/{user_id}/groups/roles"
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    for entry in data.get("data", []):
+                        if entry["group"]["id"] == group_id:
+                            return True
+    except Exception as e:
+        log.error(f"[Roblox] Error verificando grupo para {user_id}: {e}")
+    return False
+
+
+async def roblox_get_avatar(user_id: int) -> str | None:
+    """Obtiene el avatar headshot de un usuario de Roblox."""
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://thumbnails.roblox.com/v1/users/avatar-headshot"
+                f"?userIds={user_id}&size=150x150&format=Png"
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    if data.get("data"):
+                        return data["data"][0].get("imageUrl")
+    except Exception:
+        pass
+    return None
+
+
+# ── .robloxconfig ─────────────────────────────────────────────
+
+@bot.command(name="robloxconfig")
+@commands.check(es_admin)
+async def robloxconfig(ctx):
+    """Configura el rol de Roblox para este servidor."""
+    cfg_srv = ROBLOX_CFG.get(ctx.guild.id, {})
+    rol_actual_id = cfg_srv.get("rol_id")
+    rol_actual = ctx.guild.get_role(rol_actual_id) if rol_actual_id else None
+
+    embed = discord.Embed(
+        title="⚙️ Roblox Config",
+        description=(
+            f"Configura el rol que se dará a los miembros verificados con Roblox.\n\n"
+            f"🎮 **Grupo de Roblox:** `{ROBLOX_GROUP_ID}`\n"
+            f"🟣 **Rol actual:** {rol_actual.mention if rol_actual else '`Sin configurar`'}\n\n"
+            f"Escribe el **nombre del rol** que quieres asignar a los verificados de Roblox.\n"
+            f"*Escribe `cancelar` para abortar.*"
+        ),
+        color=discord.Color.purple()
+    )
+    await ctx.send(embed=embed)
+
+    def check(m):
+        return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
+
+    try:
+        msg = await bot.wait_for("message", timeout=60, check=check)
+    except asyncio.TimeoutError:
+        return await ctx.send("⏰ Tiempo agotado.")
+
+    if msg.content.strip().lower() == "cancelar":
+        return await ctx.send("❌ Cancelado.")
+
+    buscar = msg.content.strip().lower()
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+    coincidencias = [
+        r for r in ctx.guild.roles
+        if buscar in r.name.lower() and r != ctx.guild.default_role and not r.managed
+    ]
+
+    if not coincidencias:
+        return await ctx.send(f"❌ No encontré ningún rol con `{msg.content.strip()}`.")
+
+    rol = coincidencias[0]
+    if len(coincidencias) > 1:
+        lista = "\n".join(f"• {r.name}" for r in coincidencias[:10])
+        return await ctx.send(
+            f"⚠️ Encontré varios roles:\n{lista}\n\nSé más específico e intenta de nuevo."
+        )
+
+    ROBLOX_CFG[ctx.guild.id] = {
+        "rol_id":   rol.id,
+        "group_id": ROBLOX_GROUP_ID,
+    }
+    _guardar_roblox_cfg(ROBLOX_CFG)
+
+    confirm = await ctx.send(
+        embed=discord.Embed(
+            title="✅ Configuración guardada",
+            description=(
+                f"Los miembros verificados con Roblox recibirán el rol **{rol.name}**.\n"
+                f"Grupo: `{ROBLOX_GROUP_ID}`"
+            ),
+            color=discord.Color.green()
+        )
+    )
+    await asyncio.sleep(10)
+    try:
+        await confirm.delete()
+    except Exception:
+        pass
+
+
+# ── .verify <usuario_roblox> ──────────────────────────────────
+
+@bot.command(name="verify")
+async def roblox_verify(ctx, *, roblox_username: str = None):
+    """El usuario envía su username de Roblox para verificarse."""
+    if not roblox_username:
+        return await ctx.send(f"❌ Uso: `{PREFIX}verify <tu_usuario_de_roblox>`")
+
+    cfg_srv = ROBLOX_CFG.get(ctx.guild.id, {})
+    if not cfg_srv.get("rol_id"):
+        return await ctx.send(
+            "❌ El servidor aún no ha configurado la verificación de Roblox. "
+            "Pide a un administrador que use `.robloxconfig`."
+        )
+
+    # Buscar ID de Roblox
+    msg_wait = await ctx.send(
+        embed=discord.Embed(
+            description=f"🔍 Buscando usuario `{roblox_username}` en Roblox...",
+            color=discord.Color.blurple()
+        )
+    )
+
+    roblox_id = await roblox_get_user_id(roblox_username)
+    if not roblox_id:
+        await msg_wait.delete()
+        return await ctx.send(
+            embed=discord.Embed(
+                title="❌ Usuario no encontrado",
+                description=f"No encontré el usuario `{roblox_username}` en Roblox. Verifica que esté bien escrito.",
+                color=discord.Color.red()
+            )
+        )
+
+    # Verificar si está en el grupo
+    group_id = cfg_srv.get("group_id", ROBLOX_GROUP_ID)
+    en_grupo  = await roblox_en_grupo(roblox_id, group_id)
+    avatar    = await roblox_get_avatar(roblox_id)
+
+    await msg_wait.delete()
+
+    if not en_grupo:
+        embed_no = discord.Embed(
+            title="❌ No estás en el grupo",
+            description=(
+                f"El usuario de Roblox `{roblox_username}` **no está** en el grupo `{group_id}`.\n\n"
+                f"Únete al grupo e intenta de nuevo."
+            ),
+            color=discord.Color.red()
+        )
+        if avatar:
+            embed_no.set_thumbnail(url=avatar)
+        return await ctx.send(embed=embed_no)
+
+    # Está en el grupo — guardar pendiente y notificar admins
+    if ctx.guild.id not in ROBLOX_PENDING:
+        ROBLOX_PENDING[ctx.guild.id] = {}
+    ROBLOX_PENDING[ctx.guild.id][ctx.author.id] = {
+        "roblox_username": roblox_username,
+        "roblox_id":       roblox_id,
+        "avatar":          avatar,
+    }
+
+    # Embed de confirmación al usuario
+    embed_ok = discord.Embed(
+        title="✅ ¡Estás en el grupo!",
+        description=(
+            f"Se encontró tu cuenta de Roblox **{roblox_username}** en el grupo.\n"
+            f"Tu solicitud fue enviada a un administrador para aprobación."
+        ),
+        color=discord.Color.green()
+    )
+    if avatar:
+        embed_ok.set_thumbnail(url=avatar)
+    await ctx.send(embed=embed_ok)
+
+    # Notificar a admins con botones de aprobar/rechazar
+    embed_admin = discord.Embed(
+        title="🎮 Solicitud de verificación Roblox",
+        description=(
+            f"**Discord:** {ctx.author.mention} (`{ctx.author.id}`)\n"
+            f"**Roblox:** `{roblox_username}` (ID: `{roblox_id}`)\n"
+            f"**Grupo:** `{group_id}` ✅ Confirmado en el grupo"
+        ),
+        color=discord.Color.purple()
+    )
+    if avatar:
+        embed_admin.set_thumbnail(url=avatar)
+    embed_admin.set_footer(text=f"Servidor: {ctx.guild.name}")
+
+    view = RobloxApproveView(ctx.author, roblox_username, roblox_id, ctx.guild)
+    # Enviar en el mismo canal (admins lo verán) o en el canal actual
+    await ctx.send(embed=embed_admin, view=view)
+
+
+class RobloxApproveView(discord.ui.View):
+    def __init__(self, member: discord.Member, roblox_username: str, roblox_id: int, guild: discord.Guild):
+        super().__init__(timeout=300)
+        self.member          = member
+        self.roblox_username = roblox_username
+        self.roblox_id       = roblox_id
+        self.guild           = guild
+        self.procesado       = False
+
+        btn_aprobar = discord.ui.Button(label="✅ Aprobar", style=discord.ButtonStyle.success)
+        btn_rechazar = discord.ui.Button(label="❌ Rechazar", style=discord.ButtonStyle.danger)
+        btn_aprobar.callback  = self.cb_aprobar
+        btn_rechazar.callback = self.cb_rechazar
+        self.add_item(btn_aprobar)
+        self.add_item(btn_rechazar)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("🔒 Solo administradores pueden aprobar.", ephemeral=True)
+            return False
+        return True
+
+    async def cb_aprobar(self, interaction: discord.Interaction):
+        if self.procesado:
+            return await interaction.response.send_message("⚠️ Ya fue procesado.", ephemeral=True)
+        self.procesado = True
+
+        cfg_srv = ROBLOX_CFG.get(self.guild.id, {})
+        rol_id  = cfg_srv.get("rol_id")
+        rol     = self.guild.get_role(rol_id) if rol_id else None
+
+        if not rol:
+            return await interaction.response.send_message(
+                "❌ No hay rol de Roblox configurado. Usa `.robloxconfig` primero.", ephemeral=True
+            )
+
+        try:
+            member = self.guild.get_member(self.member.id) or await self.guild.fetch_member(self.member.id)
+            await member.add_roles(rol, reason=f"Verificación Roblox: {self.roblox_username}")
+        except Exception as e:
+            return await interaction.response.send_message(f"❌ No pude dar el rol: `{e}`", ephemeral=True)
+
+        # Limpiar pendiente
+        if self.guild.id in ROBLOX_PENDING:
+            ROBLOX_PENDING[self.guild.id].pop(self.member.id, None)
+
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="✅ Verificación aprobada",
+                description=(
+                    f"**Discord:** {self.member.mention}\n"
+                    f"**Roblox:** `{self.roblox_username}`\n"
+                    f"**Rol dado:** {rol.mention}\n"
+                    f"**Aprobado por:** {interaction.user.mention}"
+                ),
+                color=discord.Color.green()
+            ),
+            view=None
+        )
+
+        # Notificar al usuario
+        try:
+            await self.member.send(
+                embed=discord.Embed(
+                    title="✅ ¡Verificación aprobada!",
+                    description=(
+                        f"Tu cuenta de Roblox **{self.roblox_username}** fue verificada en **{self.guild.name}**.\n"
+                        f"Se te asignó el rol **{rol.name}**."
+                    ),
+                    color=discord.Color.green()
+                )
+            )
+        except Exception:
+            pass
+
+        self.stop()
+
+    async def cb_rechazar(self, interaction: discord.Interaction):
+        if self.procesado:
+            return await interaction.response.send_message("⚠️ Ya fue procesado.", ephemeral=True)
+        self.procesado = True
+
+        if self.guild.id in ROBLOX_PENDING:
+            ROBLOX_PENDING[self.guild.id].pop(self.member.id, None)
+
+        await interaction.response.edit_message(
+            embed=discord.Embed(
+                title="❌ Verificación rechazada",
+                description=(
+                    f"**Discord:** {self.member.mention}\n"
+                    f"**Roblox:** `{self.roblox_username}`\n"
+                    f"**Rechazado por:** {interaction.user.mention}"
+                ),
+                color=discord.Color.red()
+            ),
+            view=None
+        )
+
+        try:
+            await self.member.send(
+                embed=discord.Embed(
+                    title="❌ Verificación rechazada",
+                    description=(
+                        f"Tu solicitud de verificación con Roblox en **{self.guild.name}** fue rechazada.\n"
+                        f"Contacta a un administrador si crees que es un error."
+                    ),
+                    color=discord.Color.red()
+                )
+            )
+        except Exception:
+            pass
+
+        self.stop()
+
+
+# ── .robloxcheck @usuario ──────────────────────────────────────
+
+@bot.command(name="robloxcheck")
+@commands.check(es_admin)
+async def robloxcheck(ctx, member: discord.Member = None):
+    """Admin: verifica manualmente si un miembro sigue en el grupo de Roblox."""
+    if not member:
+        return await ctx.send(f"❌ Uso: `{PREFIX}robloxcheck @usuario`")
+
+    cfg_srv  = ROBLOX_CFG.get(ctx.guild.id, {})
+    group_id = cfg_srv.get("group_id", ROBLOX_GROUP_ID)
+
+    # Ver si tiene solicitud pendiente o hay info guardada
+    pending = ROBLOX_PENDING.get(ctx.guild.id, {}).get(member.id)
+
+    if not pending:
+        return await ctx.send(
+            embed=discord.Embed(
+                title="❌ Sin datos",
+                description=(
+                    f"{member.mention} no tiene ninguna cuenta de Roblox registrada.\n"
+                    f"El usuario debe usar `.verify <usuario_roblox>` primero."
+                ),
+                color=discord.Color.red()
+            )
+        )
+
+    roblox_username = pending["roblox_username"]
+    roblox_id       = pending["roblox_id"]
+
+    msg_wait = await ctx.send(
+        embed=discord.Embed(
+            description=f"🔍 Verificando `{roblox_username}` en el grupo `{group_id}`...",
+            color=discord.Color.blurple()
+        )
+    )
+
+    en_grupo = await roblox_en_grupo(roblox_id, group_id)
+    avatar   = pending.get("avatar") or await roblox_get_avatar(roblox_id)
+    await msg_wait.delete()
+
+    embed = discord.Embed(
+        title="🎮 Roblox Check",
+        description=(
+            f"**Discord:** {member.mention}\n"
+            f"**Roblox:** `{roblox_username}` (ID: `{roblox_id}`)\n"
+            f"**Grupo `{group_id}`:** {'✅ En el grupo' if en_grupo else '❌ Ya no está en el grupo'}"
+        ),
+        color=discord.Color.green() if en_grupo else discord.Color.red()
+    )
+    if avatar:
+        embed.set_thumbnail(url=avatar)
+
+    await ctx.send(embed=embed)
+
+
+@robloxcheck.error
+async def robloxcheck_error(ctx, error):
+    if isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ Miembro no encontrado.")
+    elif isinstance(error, commands.CheckFailure):
+        await ctx.send("🔒 Solo administradores.")
+
+
+# ═════════════════════════════════════════════════════════════
 #  ⚙️ CONFIGURACIÓN
 # ═════════════════════════════════════════════════════════════
 
@@ -2868,7 +3293,10 @@ async def ayuda(ctx):
             f"`{p}ru [@u]` `{p}ann [#c] <msg>` `{p}emb [#c] \"titulo\" <msg>`\n"
             f"`{p}v @u` — Dar acceso (rol guardado)\n"
             f"`{p}vconfig` — Configurar qué rol da `{p}v` (una sola vez)\n"
-            f"`{p}setup verify #canal` — Enviar embed de verificación a un canal"
+            f"`{p}setup verify #canal` — Enviar embed de verificación a un canal\n"
+            f"`{p}verify <usuario_roblox>` — Verificarse con Roblox\n"
+            f"`{p}robloxconfig` — Configurar rol de Roblox (admin)\n"
+            f"`{p}robloxcheck @u` — Checar si sigue en el grupo (admin)"
         ), inline=False)
     embed.add_field(name="🎰 Juegos",
         value=(
