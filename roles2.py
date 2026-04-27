@@ -2078,6 +2078,189 @@ async def dar_rol_arn_error(ctx, error):
 
 
 # ═════════════════════════════════════════════════════════════
+#  ✅ SETUP VERIFY
+# ═════════════════════════════════════════════════════════════
+
+VERIFY_SETUP_FILE = "verify_setup.json"
+
+def _cargar_verify_setup() -> dict:
+    if os.path.exists(VERIFY_SETUP_FILE):
+        with open(VERIFY_SETUP_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return {int(k): v for k, v in data.items()}
+    return {}
+
+def _guardar_verify_setup(data: dict):
+    with open(VERIFY_SETUP_FILE, "w", encoding="utf-8") as f:
+        json.dump({str(k): v for k, v in data.items()}, f, indent=2, ensure_ascii=False)
+
+VERIFY_SETUPS: dict = _cargar_verify_setup()
+
+
+@bot.command(name="setup")
+@commands.check(es_admin)
+async def setup_verify(ctx, subcmd: str = None, channel: discord.TextChannel = None):
+    if subcmd != "verify":
+        return await ctx.send(f"❌ Uso: `{PREFIX}setup verify #canal`")
+    if not channel:
+        return await ctx.send(f"❌ Debes indicar el canal. Uso: `{PREFIX}setup verify #canal`")
+
+    def check_autor(m):
+        return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
+
+    # ── Paso 1: descripción ─────────────────────────────────
+    await ctx.send(
+        embed=discord.Embed(
+            title="⚙️ Setup Verify — Paso 1/3",
+            description=(
+                f"📋 **¿Qué debe decir la descripción del embed de verificación?**\n\n"
+                f"Escribe el texto ahora en este canal. Puedes usar varias líneas.\n"
+                f"*Escribe `cancelar` para abortar.*"
+            ),
+            color=discord.Color.blurple()
+        ),
+        delete_after=120
+    )
+
+    try:
+        msg_desc = await bot.wait_for("message", timeout=120, check=check_autor)
+    except asyncio.TimeoutError:
+        return await ctx.send("⏰ Tiempo agotado. Usa el comando de nuevo.")
+
+    if msg_desc.content.strip().lower() == "cancelar":
+        return await ctx.send("❌ Setup cancelado.")
+
+    descripcion = msg_desc.content.strip()
+    try:
+        await msg_desc.delete()
+    except Exception:
+        pass
+
+    # ── Paso 2: color del embed ──────────────────────────────
+    msg_color_q = await ctx.send(
+        embed=discord.Embed(
+            title="⚙️ Setup Verify — Paso 2/3",
+            description=(
+                "🎨 **¿Qué color quieres para el embed?**\n\n"
+                "Escribe un color en HEX (ej: `#5865F2`) o una de estas palabras:\n"
+                "`azul` `verde` `rojo` `dorado` `blanco` `negro` `morado`\n\n"
+                "*Escribe `cancelar` para abortar.*"
+            ),
+            color=discord.Color.blurple()
+        )
+    )
+
+    try:
+        msg_color = await bot.wait_for("message", timeout=60, check=check_autor)
+    except asyncio.TimeoutError:
+        return await ctx.send("⏰ Tiempo agotado. Usa el comando de nuevo.")
+
+    if msg_color.content.strip().lower() == "cancelar":
+        return await ctx.send("❌ Setup cancelado.")
+
+    colores_texto = {
+        "azul":   0x5865F2, "verde":  0x57F287, "rojo":   0xED4245,
+        "dorado": 0xFEE75C, "blanco": 0xFFFFFF, "negro":  0x23272A,
+        "morado": 0x9B59B6,
+    }
+    raw_color = msg_color.content.strip().lower()
+    color_val = colores_texto.get(raw_color)
+    if not color_val:
+        try:
+            color_val = int(raw_color.lstrip("#"), 16)
+        except Exception:
+            color_val = 0x5865F2
+    try:
+        await msg_color.delete()
+        await msg_color_q.delete()
+    except Exception:
+        pass
+
+    # ── Paso 3: banner ───────────────────────────────────────
+    msg_banner_q = await ctx.send(
+        embed=discord.Embed(
+            title="⚙️ Setup Verify — Paso 3/3",
+            description=(
+                "🖼️ **¿Quieres agregar un banner al embed?**\n\n"
+                "Envía la imagen ahora **adjuntándola** a tu mensaje.\n"
+                "Si no quieres banner escribe `no`.\n\n"
+                "*Escribe `cancelar` para abortar.*"
+            ),
+            color=discord.Color.blurple()
+        )
+    )
+
+    try:
+        msg_banner = await bot.wait_for("message", timeout=120, check=check_autor)
+    except asyncio.TimeoutError:
+        return await ctx.send("⏰ Tiempo agotado. Usa el comando de nuevo.")
+
+    if msg_banner.content.strip().lower() == "cancelar":
+        return await ctx.send("❌ Setup cancelado.")
+
+    banner_url = None
+    if msg_banner.attachments:
+        banner_url = msg_banner.attachments[0].url
+    try:
+        await msg_banner.delete()
+        await msg_banner_q.delete()
+    except Exception:
+        pass
+
+    # ── Construir y enviar el embed al canal ─────────────────
+    icon_url = ctx.guild.icon.url if ctx.guild.icon else None
+
+    embed_verify = discord.Embed(
+        title="Verification Steps",
+        description=descripcion,
+        color=color_val
+    )
+    if icon_url:
+        embed_verify.set_thumbnail(url=icon_url)
+    if banner_url:
+        embed_verify.set_image(url=banner_url)
+    embed_verify.set_footer(text=ctx.guild.name)
+
+    try:
+        sent = await channel.send(embed=embed_verify)
+    except discord.Forbidden:
+        return await ctx.send(f"❌ No tengo permisos para enviar mensajes en {channel.mention}.")
+
+    # Guardar configuración
+    VERIFY_SETUPS[ctx.guild.id] = {
+        "channel_id":  channel.id,
+        "message_id":  sent.id,
+        "descripcion": descripcion,
+        "color":       color_val,
+        "banner_url":  banner_url,
+    }
+    _guardar_verify_setup(VERIFY_SETUPS)
+
+    confirm = await ctx.send(
+        embed=discord.Embed(
+            title="✅ Embed de verificación enviado",
+            description=f"El mensaje fue publicado en {channel.mention} correctamente.",
+            color=discord.Color.green()
+        )
+    )
+    await asyncio.sleep(10)
+    try:
+        await confirm.delete()
+    except Exception:
+        pass
+
+
+@setup_verify.error
+async def setup_verify_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("🔒 Solo administradores pueden usar este comando.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"❌ Canal inválido. Uso: `{PREFIX}setup verify #canal`")
+    else:
+        await ctx.send(f"⚠️ Error: `{error}`")
+
+
+# ═════════════════════════════════════════════════════════════
 #  ⚙️ CONFIGURACIÓN
 # ═════════════════════════════════════════════════════════════
 
@@ -2684,7 +2867,8 @@ async def ayuda(ctx):
             f"`{p}cr #color <nombre>` `{p}er <nombre>` `{p}lroles`\n"
             f"`{p}ru [@u]` `{p}ann [#c] <msg>` `{p}emb [#c] \"titulo\" <msg>`\n"
             f"`{p}v @u` — Dar acceso (rol guardado)\n"
-            f"`{p}vconfig` — Configurar qué rol da `{p}v` (una sola vez)"
+            f"`{p}vconfig` — Configurar qué rol da `{p}v` (una sola vez)\n"
+            f"`{p}setup verify #canal` — Enviar embed de verificación a un canal"
         ), inline=False)
     embed.add_field(name="🎰 Juegos",
         value=(
