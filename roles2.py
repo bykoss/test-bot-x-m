@@ -2019,11 +2019,19 @@ async def dar_rol_arn(ctx, member: discord.Member):
     roles_quitados = []
     roles_fallidos = []
 
+    # Quitar rol configurado + cualquier rol con nombre unverified automáticamente
+    roles_a_quitar = []
     if rol_quitar_id:
         r = ctx.guild.get_role(rol_quitar_id)
-        roles_a_quitar = [r] if r and r in member.roles else []
-    else:
-        roles_a_quitar = []
+        if r and r in member.roles:
+            roles_a_quitar.append(r)
+
+    unverified_keywords = ["unverified", "unverify", "no verificado", "sin verificar", "not verified"]
+    for r in member.roles:
+        if r == ctx.guild.default_role or r.managed:
+            continue
+        if any(kw in r.name.lower() for kw in unverified_keywords) and r not in roles_a_quitar:
+            roles_a_quitar.append(r)
 
     if roles_a_quitar:
         try:
@@ -2414,22 +2422,22 @@ async def robloxconfig(ctx):
 # ── .verify <usuario_roblox> ──────────────────────────────────
 
 @bot.command(name="verify")
-async def roblox_verify(ctx, *, roblox_username: str = None):
-    """El usuario envía su username de Roblox para verificarse."""
-    if not roblox_username:
-        return await ctx.send(f"❌ Uso: `{PREFIX}verify <tu_usuario_de_roblox>`")
+@commands.check(es_admin)
+async def roblox_verify(ctx, roblox_username: str = None, member: discord.Member = None):
+    """Admin: verifica a un miembro con su usuario de Roblox y le da el rol directamente."""
+    if not roblox_username or not member:
+        return await ctx.send(f"❌ Uso: `{PREFIX}verify <usuario_roblox> @miembro`")
 
     cfg_srv = ROBLOX_CFG.get(ctx.guild.id, {})
     if not cfg_srv.get("rol_id"):
         return await ctx.send(
-            "❌ El servidor aún no ha configurado la verificación de Roblox. "
-            "Pide a un administrador que use `.robloxconfig`."
+            "❌ El servidor aún no tiene rol de Roblox configurado. "
+            "Usa `.robloxconfig` primero."
         )
 
-    # Buscar ID de Roblox
     msg_wait = await ctx.send(
         embed=discord.Embed(
-            description=f"🔍 Buscando usuario `{roblox_username}` en Roblox...",
+            description=f"🔍 Verificando `{roblox_username}` en Roblox...",
             color=discord.Color.blurple()
         )
     )
@@ -2445,19 +2453,16 @@ async def roblox_verify(ctx, *, roblox_username: str = None):
             )
         )
 
-    # Verificar si está en el grupo
     group_id = cfg_srv.get("group_id", ROBLOX_GROUP_ID)
-    en_grupo  = await roblox_en_grupo(roblox_id, group_id)
-    avatar    = await roblox_get_avatar(roblox_id)
-
+    en_grupo = await roblox_en_grupo(roblox_id, group_id)
+    avatar   = await roblox_get_avatar(roblox_id)
     await msg_wait.delete()
 
     if not en_grupo:
         embed_no = discord.Embed(
-            title="❌ No estás en el grupo",
+            title="❌ No está en el grupo",
             description=(
-                f"El usuario de Roblox `{roblox_username}` **no está** en el grupo `{group_id}`.\n\n"
-                f"Únete al grupo e intenta de nuevo."
+                f"El usuario de Roblox `{roblox_username}` **no está** en el grupo `{group_id}`.\nDebe unirse al grupo e intentarlo de nuevo."
             ),
             color=discord.Color.red()
         )
@@ -2465,160 +2470,73 @@ async def roblox_verify(ctx, *, roblox_username: str = None):
             embed_no.set_thumbnail(url=avatar)
         return await ctx.send(embed=embed_no)
 
-    # Está en el grupo — guardar pendiente y notificar admins
+    # Dar rol de Roblox
+    rol_id  = cfg_srv.get("rol_id")
+    rol_dar = ctx.guild.get_role(rol_id)
+    if not rol_dar:
+        return await ctx.send("❌ El rol de Roblox ya no existe. Usa `.robloxconfig` para actualizarlo.")
+
+    # Quitar roles unverified
+    unverified_keywords = ["unverified", "unverify", "no verificado", "sin verificar", "not verified"]
+    roles_quitar = [
+        r for r in member.roles
+        if not r.managed and r != ctx.guild.default_role
+        and any(kw in r.name.lower() for kw in unverified_keywords)
+    ]
+
+    if roles_quitar:
+        try:
+            await member.remove_roles(*roles_quitar, reason=f"verify Roblox — {ctx.author}")
+        except Exception:
+            pass
+
+    try:
+        await member.add_roles(rol_dar, reason=f"verify Roblox: {roblox_username} — {ctx.author}")
+    except discord.Forbidden:
+        return await ctx.send(f"❌ No pude asignar **{rol_dar.name}**. Sube el rol del bot en la jerarquía.")
+
+    # Guardar en pending para robloxcheck
     if ctx.guild.id not in ROBLOX_PENDING:
         ROBLOX_PENDING[ctx.guild.id] = {}
-    ROBLOX_PENDING[ctx.guild.id][ctx.author.id] = {
+    ROBLOX_PENDING[ctx.guild.id][member.id] = {
         "roblox_username": roblox_username,
         "roblox_id":       roblox_id,
         "avatar":          avatar,
     }
 
-    # Embed de confirmación al usuario
     embed_ok = discord.Embed(
-        title="✅ ¡Estás en el grupo!",
-        description=(
-            f"Se encontró tu cuenta de Roblox **{roblox_username}** en el grupo.\n"
-            f"Tu solicitud fue enviada a un administrador para aprobación."
-        ),
+        title="✅ Verificación Roblox completada",
         color=discord.Color.green()
     )
+    embed_ok.add_field(name="👤 Discord",   value=member.mention,          inline=True)
+    embed_ok.add_field(name="🎮 Roblox",    value=f"`{roblox_username}`",  inline=True)
+    embed_ok.add_field(name="✅ Rol dado",  value=rol_dar.mention,         inline=True)
+    embed_ok.add_field(name="✍️ Por",        value=ctx.author.mention,      inline=True)
+    if roles_quitar:
+        embed_ok.add_field(
+            name="🗑️ Roles quitados",
+            value=", ".join(f"`{r.name}`" for r in roles_quitar),
+            inline=False
+        )
     if avatar:
         embed_ok.set_thumbnail(url=avatar)
-    await ctx.send(embed=embed_ok)
 
-    # Notificar a admins con botones de aprobar/rechazar
-    embed_admin = discord.Embed(
-        title="🎮 Solicitud de verificación Roblox",
-        description=(
-            f"**Discord:** {ctx.author.mention} (`{ctx.author.id}`)\n"
-            f"**Roblox:** `{roblox_username}` (ID: `{roblox_id}`)\n"
-            f"**Grupo:** `{group_id}` ✅ Confirmado en el grupo"
-        ),
-        color=discord.Color.purple()
-    )
-    if avatar:
-        embed_admin.set_thumbnail(url=avatar)
-    embed_admin.set_footer(text=f"Servidor: {ctx.guild.name}")
-
-    view = RobloxApproveView(ctx.author, roblox_username, roblox_id, ctx.guild)
-    # Enviar en el mismo canal (admins lo verán) o en el canal actual
-    await ctx.send(embed=embed_admin, view=view)
+    msg_ok = await ctx.send(embed=embed_ok)
+    await asyncio.sleep(15)
+    try:
+        await msg_ok.delete()
+    except Exception:
+        pass
 
 
-class RobloxApproveView(discord.ui.View):
-    def __init__(self, member: discord.Member, roblox_username: str, roblox_id: int, guild: discord.Guild):
-        super().__init__(timeout=300)
-        self.member          = member
-        self.roblox_username = roblox_username
-        self.roblox_id       = roblox_id
-        self.guild           = guild
-        self.procesado       = False
-
-        btn_aprobar = discord.ui.Button(label="✅ Aprobar", style=discord.ButtonStyle.success)
-        btn_rechazar = discord.ui.Button(label="❌ Rechazar", style=discord.ButtonStyle.danger)
-        btn_aprobar.callback  = self.cb_aprobar
-        btn_rechazar.callback = self.cb_rechazar
-        self.add_item(btn_aprobar)
-        self.add_item(btn_rechazar)
-
-    async def interaction_check(self, interaction: discord.Interaction) -> bool:
-        if not interaction.user.guild_permissions.administrator:
-            await interaction.response.send_message("🔒 Solo administradores pueden aprobar.", ephemeral=True)
-            return False
-        return True
-
-    async def cb_aprobar(self, interaction: discord.Interaction):
-        if self.procesado:
-            return await interaction.response.send_message("⚠️ Ya fue procesado.", ephemeral=True)
-        self.procesado = True
-
-        cfg_srv = ROBLOX_CFG.get(self.guild.id, {})
-        rol_id  = cfg_srv.get("rol_id")
-        rol     = self.guild.get_role(rol_id) if rol_id else None
-
-        if not rol:
-            return await interaction.response.send_message(
-                "❌ No hay rol de Roblox configurado. Usa `.robloxconfig` primero.", ephemeral=True
-            )
-
-        try:
-            member = self.guild.get_member(self.member.id) or await self.guild.fetch_member(self.member.id)
-            await member.add_roles(rol, reason=f"Verificación Roblox: {self.roblox_username}")
-        except Exception as e:
-            return await interaction.response.send_message(f"❌ No pude dar el rol: `{e}`", ephemeral=True)
-
-        # Limpiar pendiente
-        if self.guild.id in ROBLOX_PENDING:
-            ROBLOX_PENDING[self.guild.id].pop(self.member.id, None)
-
-        await interaction.response.edit_message(
-            embed=discord.Embed(
-                title="✅ Verificación aprobada",
-                description=(
-                    f"**Discord:** {self.member.mention}\n"
-                    f"**Roblox:** `{self.roblox_username}`\n"
-                    f"**Rol dado:** {rol.mention}\n"
-                    f"**Aprobado por:** {interaction.user.mention}"
-                ),
-                color=discord.Color.green()
-            ),
-            view=None
-        )
-
-        # Notificar al usuario
-        try:
-            await self.member.send(
-                embed=discord.Embed(
-                    title="✅ ¡Verificación aprobada!",
-                    description=(
-                        f"Tu cuenta de Roblox **{self.roblox_username}** fue verificada en **{self.guild.name}**.\n"
-                        f"Se te asignó el rol **{rol.name}**."
-                    ),
-                    color=discord.Color.green()
-                )
-            )
-        except Exception:
-            pass
-
-        self.stop()
-
-    async def cb_rechazar(self, interaction: discord.Interaction):
-        if self.procesado:
-            return await interaction.response.send_message("⚠️ Ya fue procesado.", ephemeral=True)
-        self.procesado = True
-
-        if self.guild.id in ROBLOX_PENDING:
-            ROBLOX_PENDING[self.guild.id].pop(self.member.id, None)
-
-        await interaction.response.edit_message(
-            embed=discord.Embed(
-                title="❌ Verificación rechazada",
-                description=(
-                    f"**Discord:** {self.member.mention}\n"
-                    f"**Roblox:** `{self.roblox_username}`\n"
-                    f"**Rechazado por:** {interaction.user.mention}"
-                ),
-                color=discord.Color.red()
-            ),
-            view=None
-        )
-
-        try:
-            await self.member.send(
-                embed=discord.Embed(
-                    title="❌ Verificación rechazada",
-                    description=(
-                        f"Tu solicitud de verificación con Roblox en **{self.guild.name}** fue rechazada.\n"
-                        f"Contacta a un administrador si crees que es un error."
-                    ),
-                    color=discord.Color.red()
-                )
-            )
-        except Exception:
-            pass
-
-        self.stop()
+@roblox_verify.error
+async def roblox_verify_error(ctx, error):
+    if isinstance(error, commands.MissingRequiredArgument):
+        await ctx.send(f"❌ Uso: `{PREFIX}verify <usuario_roblox> @miembro`")
+    elif isinstance(error, commands.MemberNotFound):
+        await ctx.send("❌ Miembro de Discord no encontrado.")
+    elif isinstance(error, commands.CheckFailure):
+        await ctx.send("🔒 Solo administradores.")
 
 
 # ── .robloxcheck @usuario ──────────────────────────────────────
@@ -2633,16 +2551,14 @@ async def robloxcheck(ctx, member: discord.Member = None):
     cfg_srv  = ROBLOX_CFG.get(ctx.guild.id, {})
     group_id = cfg_srv.get("group_id", ROBLOX_GROUP_ID)
 
-    # Ver si tiene solicitud pendiente o hay info guardada
     pending = ROBLOX_PENDING.get(ctx.guild.id, {}).get(member.id)
-
     if not pending:
         return await ctx.send(
             embed=discord.Embed(
                 title="❌ Sin datos",
                 description=(
                     f"{member.mention} no tiene ninguna cuenta de Roblox registrada.\n"
-                    f"El usuario debe usar `.verify <usuario_roblox>` primero."
+                    f"Usa `{PREFIX}verify <usuario_roblox> @miembro` para registrarla."
                 ),
                 color=discord.Color.red()
             )
@@ -2667,13 +2583,12 @@ async def robloxcheck(ctx, member: discord.Member = None):
         description=(
             f"**Discord:** {member.mention}\n"
             f"**Roblox:** `{roblox_username}` (ID: `{roblox_id}`)\n"
-            f"**Grupo `{group_id}`:** {'✅ En el grupo' if en_grupo else '❌ Ya no está en el grupo'}"
+            f"**Grupo `{group_id}`:** {chr(9989) + ' En el grupo' if en_grupo else chr(10060) + ' Ya no está en el grupo'}"
         ),
         color=discord.Color.green() if en_grupo else discord.Color.red()
     )
     if avatar:
         embed.set_thumbnail(url=avatar)
-
     await ctx.send(embed=embed)
 
 
@@ -2683,6 +2598,273 @@ async def robloxcheck_error(ctx, error):
         await ctx.send("❌ Miembro no encontrado.")
     elif isinstance(error, commands.CheckFailure):
         await ctx.send("🔒 Solo administradores.")
+
+
+# ── .setroblosecurity <cookie> ────────────────────────────────
+
+ROBLO_COOKIE: dict = {}   # { guild_id: cookie_str }
+
+@bot.command(name="setroblosecurity")
+@commands.check(es_admin)
+async def setroblosecurity(ctx, *, cookie: str = None):
+    """Configura la cookie .ROBLOSECURITY para aceptar solicitudes al grupo."""
+    if not cookie:
+        return await ctx.send(f"❌ Uso: `{PREFIX}setroblosecurity <tu_cookie>`")
+    try:
+        await ctx.message.delete()
+    except Exception:
+        pass
+    ROBLO_COOKIE[ctx.guild.id] = cookie.strip()
+    await ctx.send(
+        embed=discord.Embed(
+            title="✅ Cookie guardada",
+            description="La cookie `.ROBLOSECURITY` fue guardada en memoria.\n⚠️ Por seguridad **no** se almacena en disco. Deberás volver a ponerla si reinicias el bot.",
+            color=discord.Color.green()
+        ),
+        delete_after=15
+    )
+
+
+# ── .accept group <roblox_user> ───────────────────────────────
+
+@bot.command(name="accept")
+@commands.check(es_admin)
+async def accept_group(ctx, subcmd: str = None, *, roblox_username: str = None):
+    """Admin: acepta la solicitud de entrada al grupo de Roblox."""
+    if subcmd != "group" or not roblox_username:
+        return await ctx.send(f"❌ Uso: `{PREFIX}accept group <usuario_roblox>`")
+
+    cookie = ROBLO_COOKIE.get(ctx.guild.id)
+    if not cookie:
+        return await ctx.send(
+            f"❌ No hay cookie configurada. Usa `{PREFIX}setroblosecurity <cookie>` primero."
+        )
+
+    cfg_srv  = ROBLOX_CFG.get(ctx.guild.id, {})
+    group_id = cfg_srv.get("group_id", ROBLOX_GROUP_ID)
+
+    msg_wait = await ctx.send(
+        embed=discord.Embed(
+            description=f"🔍 Buscando usuario `{roblox_username}`...",
+            color=discord.Color.blurple()
+        )
+    )
+
+    roblox_id = await roblox_get_user_id(roblox_username)
+    if not roblox_id:
+        await msg_wait.delete()
+        return await ctx.send(
+            embed=discord.Embed(
+                title="❌ Usuario no encontrado",
+                description=f"No encontré `{roblox_username}` en Roblox.",
+                color=discord.Color.red()
+            )
+        )
+
+    # Aceptar solicitud via API de Roblox
+    headers = {
+        "Cookie": f".ROBLOSECURITY={cookie}",
+        "Content-Type": "application/json",
+        "X-CSRF-TOKEN": "",
+    }
+
+    try:
+        async with aiohttp.ClientSession() as session:
+            # Obtener CSRF token
+            async with session.post(
+                "https://auth.roblox.com/v2/logout",
+                headers={"Cookie": f".ROBLOSECURITY={cookie}"}
+            ) as resp:
+                csrf = resp.headers.get("x-csrf-token", "")
+
+            headers["X-CSRF-TOKEN"] = csrf
+
+            # Aceptar solicitud al grupo
+            async with session.post(
+                f"https://groups.roblox.com/v1/groups/{group_id}/join-requests/users/{roblox_id}",
+                headers=headers
+            ) as resp:
+                await msg_wait.delete()
+                if resp.status in (200, 204):
+                    avatar = await roblox_get_avatar(roblox_id)
+                    embed_ok = discord.Embed(
+                        title="✅ Solicitud aceptada",
+                        description=(
+                            f"**Usuario:** `{roblox_username}` (ID: `{roblox_id}`)\n"
+                            f"**Grupo:** `{group_id}`\n"
+                            f"**Aceptado por:** {ctx.author.mention}"
+                        ),
+                        color=discord.Color.green()
+                    )
+                    if avatar:
+                        embed_ok.set_thumbnail(url=avatar)
+                    await ctx.send(embed=embed_ok)
+                elif resp.status == 403:
+                    body = await resp.json()
+                    errors = body.get("errors", [])
+                    msg_err = errors[0].get("message", "Forbidden") if errors else "Forbidden"
+                    if "csrf" in msg_err.lower():
+                        await ctx.send("❌ Error de CSRF. Intenta de nuevo.")
+                    else:
+                        await ctx.send(f"❌ Sin permisos para aceptar en el grupo: `{msg_err}`")
+                elif resp.status == 400:
+                    await ctx.send(
+                        embed=discord.Embed(
+                            title="⚠️ No hay solicitud pendiente",
+                            description=f"`{roblox_username}` no tiene una solicitud pendiente en el grupo `{group_id}`.",
+                            color=discord.Color.orange()
+                        )
+                    )
+                else:
+                    body = await resp.text()
+                    await ctx.send(f"⚠️ Respuesta inesperada `{resp.status}`: `{body[:200]}`")
+
+    except Exception as e:
+        log.error(f"[accept group] Error: {e}")
+        try:
+            await msg_wait.delete()
+        except Exception:
+            pass
+        await ctx.send(f"❌ Error al conectar con Roblox: `{e}`")
+
+
+@accept_group.error
+async def accept_group_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("🔒 Solo administradores.")
+
+
+# ═════════════════════════════════════════════════════════════
+
+# ═════════════════════════════════════════════════════════════
+#  📢 SAY — ENVIAR MENSAJES COMO EL BOT
+# ═════════════════════════════════════════════════════════════
+
+@bot.command(name="say")
+@commands.check(es_admin)
+async def say_cmd(ctx, canal: discord.TextChannel = None):
+    """Admin: envía un mensaje como el bot a un canal."""
+    destino = canal or ctx.channel
+
+    def check(m):
+        return m.author.id == ctx.author.id and m.channel.id == ctx.channel.id
+
+    # Paso 1: Texto
+    p1 = await ctx.send(
+        embed=discord.Embed(
+            title="📢 Say — Paso 1/3",
+            description="✏️ **Escribe el texto del mensaje:**\n*Escribe `cancelar` para abortar.*",
+            color=discord.Color.blurple()
+        ), delete_after=120
+    )
+    try:
+        msg_texto = await bot.wait_for("message", timeout=120, check=check)
+    except asyncio.TimeoutError:
+        return await ctx.send("⏰ Tiempo agotado.")
+    if msg_texto.content.strip().lower() == "cancelar":
+        return await ctx.send("❌ Cancelado.")
+    texto = msg_texto.content.strip()
+    try:
+        await msg_texto.delete()
+    except Exception:
+        pass
+
+    # Paso 2: Link
+    p2 = await ctx.send(
+        embed=discord.Embed(
+            title="📢 Say — Paso 2/3",
+            description=(
+                "🔗 **¿Quieres agregar un link?**\n\n"
+                "• Envía el link (ej: `https://...`) y el bot lo incluirá con el preview del contenido.\n"
+                "• Escribe `no` si no quieres link.\n\n"
+                "*Escribe `cancelar` para abortar.*"
+            ),
+            color=discord.Color.blurple()
+        )
+    )
+    try:
+        msg_link = await bot.wait_for("message", timeout=60, check=check)
+    except asyncio.TimeoutError:
+        return await ctx.send("⏰ Tiempo agotado.")
+    if msg_link.content.strip().lower() == "cancelar":
+        return await ctx.send("❌ Cancelado.")
+    link = None
+    raw = msg_link.content.strip()
+    if raw.lower() != "no" and (raw.startswith("http://") or raw.startswith("https://")):
+        link = raw
+    try:
+        await msg_link.delete()
+        await p2.delete()
+    except Exception:
+        pass
+
+    # Paso 3: Imagen
+    p3 = await ctx.send(
+        embed=discord.Embed(
+            title="📢 Say — Paso 3/3",
+            description=(
+                "🖼️ **¿Quieres adjuntar una imagen?**\n\n"
+                "• Adjunta la imagen a tu mensaje.\n"
+                "• Escribe `no` si no quieres imagen.\n\n"
+                "*Escribe `cancelar` para abortar.*"
+            ),
+            color=discord.Color.blurple()
+        )
+    )
+    try:
+        msg_img = await bot.wait_for("message", timeout=120, check=check)
+    except asyncio.TimeoutError:
+        return await ctx.send("⏰ Tiempo agotado.")
+    if msg_img.content.strip().lower() == "cancelar":
+        return await ctx.send("❌ Cancelado.")
+    imagen_url = None
+    if msg_img.attachments:
+        imagen_url = msg_img.attachments[0].url
+    try:
+        await msg_img.delete()
+        await p3.delete()
+    except Exception:
+        pass
+
+    # Construir y enviar
+    contenido_final = texto
+    if link:
+        contenido_final = f"{texto}\n{link}"
+
+    if imagen_url:
+        try:
+            import io
+            async with aiohttp.ClientSession() as session:
+                async with session.get(imagen_url) as resp:
+                    img_data = await resp.read()
+            file = discord.File(io.BytesIO(img_data), filename="imagen.png")
+            await destino.send(content=contenido_final, file=file)
+        except Exception:
+            await destino.send(content=contenido_final)
+    else:
+        await destino.send(content=contenido_final)
+
+    if destino != ctx.channel:
+        confirm = await ctx.send(
+            embed=discord.Embed(
+                description=f"✅ Mensaje enviado en {destino.mention}.",
+                color=discord.Color.green()
+            )
+        )
+        await asyncio.sleep(5)
+        try:
+            await confirm.delete()
+        except Exception:
+            pass
+
+
+@say_cmd.error
+async def say_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send("🔒 Solo administradores.")
+    elif isinstance(error, commands.BadArgument):
+        await ctx.send(f"❌ Canal inválido. Uso: `{PREFIX}say` o `{PREFIX}say #canal`")
+
 
 
 # ═════════════════════════════════════════════════════════════
@@ -3294,9 +3476,12 @@ async def ayuda(ctx):
             f"`{p}v @u` — Dar acceso (rol guardado)\n"
             f"`{p}vconfig` — Configurar qué rol da `{p}v` (una sola vez)\n"
             f"`{p}setup verify #canal` — Enviar embed de verificación a un canal\n"
-            f"`{p}verify <usuario_roblox>` — Verificarse con Roblox\n"
+            f"`{p}verify <roblox_user> @miembro` — Verificar miembro con Roblox\n"
             f"`{p}robloxconfig` — Configurar rol de Roblox (admin)\n"
-            f"`{p}robloxcheck @u` — Checar si sigue en el grupo (admin)"
+            f"`{p}robloxcheck @u` — Checar si sigue en el grupo (admin)\n"
+            f"`{p}setroblosecurity <cookie>` — Configurar cookie Roblox\n"
+            f"`{p}accept group <roblox_user>` — Aceptar solicitud al grupo Roblox\n"
+            f"`{p}say [#canal]` — Enviar mensaje como el bot"
         ), inline=False)
     embed.add_field(name="🎰 Juegos",
         value=(
