@@ -84,7 +84,7 @@ def es_owner_o_admin(ctx) -> bool:
 ANTINUKE_FILE = "antinuke.json"
 
 ANTINUKE_DEFAULT = {
-    "activo": True,
+    "activo": False,
     "whitelist": [],
     "owner_id": None,
     "limites": {
