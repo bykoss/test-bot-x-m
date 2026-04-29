@@ -84,7 +84,7 @@ def es_owner_o_admin(ctx) -> bool:
 ANTINUKE_FILE = "antinuke.json"
 
 ANTINUKE_DEFAULT = {
-    "activo": False,
+    "activo": True,
     "whitelist": [],
     "owner_id": None,
     "limites": {
@@ -2341,6 +2341,25 @@ async def roblox_get_avatar(user_id: int) -> str | None:
     return None
 
 
+async def roblox_get_group_info(user_id: int, group_id: int) -> dict:
+    """Obtiene el rol en el grupo y la fecha de unión del usuario."""
+    result = {"rol_nombre": None, "fecha_union": None}
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(
+                f"https://groups.roblox.com/v1/users/{user_id}/groups/roles"
+            ) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    for entry in data.get("data", []):
+                        if entry["group"]["id"] == group_id:
+                            result["rol_nombre"] = entry["role"]["name"]
+                            break
+    except Exception:
+        pass
+    return result
+
+
 # ── .robloxconfig ─────────────────────────────────────────────
 
 @bot.command(name="robloxconfig")
@@ -2424,20 +2443,20 @@ async def robloxconfig(ctx):
 @bot.command(name="verify")
 @commands.check(es_admin)
 async def roblox_verify(ctx, roblox_username: str = None, member: discord.Member = None):
-    """Admin: verifica a un miembro con su usuario de Roblox y le da el rol directamente."""
+    """Admin: muestra info de Roblox del miembro y confirma verificación."""
     if not roblox_username or not member:
-        return await ctx.send(f"❌ Uso: `{PREFIX}verify <usuario_roblox> @miembro`")
+        return await ctx.send(f"\u274c Uso: `{PREFIX}verify <usuario_roblox> @miembro`")
 
     cfg_srv = ROBLOX_CFG.get(ctx.guild.id, {})
     if not cfg_srv.get("rol_id"):
         return await ctx.send(
-            "❌ El servidor aún no tiene rol de Roblox configurado. "
+            "\u274c El servidor aún no tiene rol de Roblox configurado. "
             "Usa `.robloxconfig` primero."
         )
 
     msg_wait = await ctx.send(
         embed=discord.Embed(
-            description=f"🔍 Verificando `{roblox_username}` en Roblox...",
+            description=f"\U0001f50d Buscando `{roblox_username}` en Roblox...",
             color=discord.Color.blurple()
         )
     )
@@ -2447,22 +2466,24 @@ async def roblox_verify(ctx, roblox_username: str = None, member: discord.Member
         await msg_wait.delete()
         return await ctx.send(
             embed=discord.Embed(
-                title="❌ Usuario no encontrado",
+                title="\u274c Usuario no encontrado",
                 description=f"No encontré el usuario `{roblox_username}` en Roblox. Verifica que esté bien escrito.",
                 color=discord.Color.red()
             )
         )
 
-    group_id = cfg_srv.get("group_id", ROBLOX_GROUP_ID)
-    en_grupo = await roblox_en_grupo(roblox_id, group_id)
-    avatar   = await roblox_get_avatar(roblox_id)
+    group_id   = cfg_srv.get("group_id", ROBLOX_GROUP_ID)
+    en_grupo   = await roblox_en_grupo(roblox_id, group_id)
+    avatar     = await roblox_get_avatar(roblox_id)
+    group_info = await roblox_get_group_info(roblox_id, group_id)
     await msg_wait.delete()
 
     if not en_grupo:
         embed_no = discord.Embed(
-            title="❌ No está en el grupo",
+            title="\u274c No está en el grupo",
             description=(
-                f"El usuario de Roblox `{roblox_username}` **no está** en el grupo `{group_id}`.\nDebe unirse al grupo e intentarlo de nuevo."
+                f"El usuario de Roblox `{roblox_username}` **no está** en el grupo `{group_id}`.\n"
+                "Debe unirse al grupo e intentarlo de nuevo."
             ),
             color=discord.Color.red()
         )
@@ -2470,73 +2491,151 @@ async def roblox_verify(ctx, roblox_username: str = None, member: discord.Member
             embed_no.set_thumbnail(url=avatar)
         return await ctx.send(embed=embed_no)
 
-    # Dar rol de Roblox
     rol_id  = cfg_srv.get("rol_id")
     rol_dar = ctx.guild.get_role(rol_id)
     if not rol_dar:
-        return await ctx.send("❌ El rol de Roblox ya no existe. Usa `.robloxconfig` para actualizarlo.")
+        return await ctx.send("\u274c El rol de Roblox ya no existe. Usa `.robloxconfig` para actualizarlo.")
 
-    # Quitar roles unverified
-    unverified_keywords = ["unverified", "unverify", "no verificado", "sin verificar", "not verified"]
-    roles_quitar = [
-        r for r in member.roles
-        if not r.managed and r != ctx.guild.default_role
-        and any(kw in r.name.lower() for kw in unverified_keywords)
-    ]
-
-    if roles_quitar:
-        try:
-            await member.remove_roles(*roles_quitar, reason=f"verify Roblox — {ctx.author}")
-        except Exception:
-            pass
-
-    try:
-        await member.add_roles(rol_dar, reason=f"verify Roblox: {roblox_username} — {ctx.author}")
-    except discord.Forbidden:
-        return await ctx.send(f"❌ No pude asignar **{rol_dar.name}**. Sube el rol del bot en la jerarquía.")
-
-    # Guardar en pending para robloxcheck
-    if ctx.guild.id not in ROBLOX_PENDING:
-        ROBLOX_PENDING[ctx.guild.id] = {}
-    ROBLOX_PENDING[ctx.guild.id][member.id] = {
-        "roblox_username": roblox_username,
-        "roblox_id":       roblox_id,
-        "avatar":          avatar,
-    }
-
-    embed_ok = discord.Embed(
-        title="✅ Verificación Roblox completada",
-        color=discord.Color.green()
+    # Construir embed de confirmación visible para todos
+    embed_confirm = discord.Embed(
+        title="\U0001f510 Confirm details",
+        color=discord.Color.blurple()
     )
-    embed_ok.add_field(name="👤 Discord",   value=member.mention,          inline=True)
-    embed_ok.add_field(name="🎮 Roblox",    value=f"`{roblox_username}`",  inline=True)
-    embed_ok.add_field(name="✅ Rol dado",  value=rol_dar.mention,         inline=True)
-    embed_ok.add_field(name="✍️ Por",        value=ctx.author.mention,      inline=True)
-    if roles_quitar:
-        embed_ok.add_field(
-            name="🗑️ Roles quitados",
-            value=", ".join(f"`{r.name}`" for r in roles_quitar),
-            inline=False
-        )
+    embed_confirm.add_field(
+        name="\U0001f464 Target User",
+        value=f"{member.mention}\n`{member.name}` (`{member.id}`)",
+        inline=True
+    )
+    embed_confirm.add_field(
+        name="\U0001f3ae Roblox Account",
+        value=f"`{roblox_username}`\nID: `{roblox_id}`",
+        inline=True
+    )
+    embed_confirm.add_field(name="\u200b", value="\u200b", inline=False)
+    embed_confirm.add_field(
+        name="\U0001f451 Rol en el grupo",
+        value=f"`{group_info['rol_nombre'] or 'Miembro'}`",
+        inline=True
+    )
+    embed_confirm.add_field(
+        name="\u2705 Rol a dar",
+        value=rol_dar.mention,
+        inline=True
+    )
+    embed_confirm.add_field(
+        name="\U0001f6e1\ufe0f Grupo",
+        value=f"`{group_id}`",
+        inline=True
+    )
     if avatar:
-        embed_ok.set_thumbnail(url=avatar)
+        embed_confirm.set_thumbnail(url=avatar)
+    embed_confirm.set_footer(text=f"Solicitado por {ctx.author.display_name}", icon_url=ctx.author.display_avatar.url)
 
-    msg_ok = await ctx.send(embed=embed_ok)
-    await asyncio.sleep(15)
-    try:
-        await msg_ok.delete()
-    except Exception:
-        pass
+    view = RobloxConfirmView(ctx, member, roblox_username, roblox_id, avatar, rol_dar)
+    await ctx.send(embed=embed_confirm, view=view)
+
+
+class RobloxConfirmView(discord.ui.View):
+    def __init__(self, ctx, member, roblox_username, roblox_id, avatar, rol_dar):
+        super().__init__(timeout=120)
+        self.ctx             = ctx
+        self.member          = member
+        self.roblox_username = roblox_username
+        self.roblox_id       = roblox_id
+        self.avatar          = avatar
+        self.rol_dar         = rol_dar
+        self.procesado       = False
+
+        btn_confirm = discord.ui.Button(label="Confirm", style=discord.ButtonStyle.success, emoji="\u2705")
+        btn_cancel  = discord.ui.Button(label="Cancel",  style=discord.ButtonStyle.danger,  emoji="\u274c")
+        btn_confirm.callback = self.cb_confirm
+        btn_cancel.callback  = self.cb_cancel
+        self.add_item(btn_confirm)
+        self.add_item(btn_cancel)
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if not interaction.user.guild_permissions.administrator:
+            await interaction.response.send_message("\U0001f512 Solo administradores pueden confirmar.", ephemeral=True)
+            return False
+        return True
+
+    async def cb_confirm(self, interaction: discord.Interaction):
+        if self.procesado:
+            return await interaction.response.send_message("\u26a0\ufe0f Ya fue procesado.", ephemeral=True)
+        self.procesado = True
+
+        # Quitar roles unverified
+        unverified_keywords = ["unverified", "unverify", "no verificado", "sin verificar", "not verified"]
+        roles_quitar = [
+            r for r in self.member.roles
+            if not r.managed and r != self.ctx.guild.default_role
+            and any(kw in r.name.lower() for kw in unverified_keywords)
+        ]
+        if roles_quitar:
+            try:
+                await self.member.remove_roles(*roles_quitar, reason=f"verify Roblox — {interaction.user}")
+            except Exception:
+                pass
+
+        try:
+            await self.member.add_roles(self.rol_dar, reason=f"verify Roblox: {self.roblox_username} — {interaction.user}")
+        except discord.Forbidden:
+            return await interaction.response.send_message(
+                f"\u274c No pude asignar **{self.rol_dar.name}**. Sube el rol del bot en la jerarquía.",
+                ephemeral=True
+            )
+
+        # Guardar en pending para robloxcheck
+        if self.ctx.guild.id not in ROBLOX_PENDING:
+            ROBLOX_PENDING[self.ctx.guild.id] = {}
+        ROBLOX_PENDING[self.ctx.guild.id][self.member.id] = {
+            "roblox_username": self.roblox_username,
+            "roblox_id":       self.roblox_id,
+            "avatar":          self.avatar,
+        }
+
+        embed_ok = discord.Embed(
+            title="\u2705 Verificación completada",
+            color=discord.Color.green()
+        )
+        embed_ok.add_field(name="\U0001f464 Discord",  value=self.member.mention,             inline=True)
+        embed_ok.add_field(name="\U0001f3ae Roblox",   value=f"`{self.roblox_username}`",     inline=True)
+        embed_ok.add_field(name="\U0001f7e2 Rol dado", value=self.rol_dar.mention,            inline=True)
+        embed_ok.add_field(name="\u270d\ufe0f Por",    value=interaction.user.mention,        inline=True)
+        if roles_quitar:
+            embed_ok.add_field(
+                name="\U0001f5d1\ufe0f Roles quitados",
+                value=", ".join(f"`{r.name}`" for r in roles_quitar),
+                inline=False
+            )
+        if self.avatar:
+            embed_ok.set_thumbnail(url=self.avatar)
+
+        await interaction.response.edit_message(embed=embed_ok, view=None)
+        self.stop()
+
+    async def cb_cancel(self, interaction: discord.Interaction):
+        if self.procesado:
+            return await interaction.response.send_message("\u26a0\ufe0f Ya fue procesado.", ephemeral=True)
+        self.procesado = True
+
+        embed_cancel = discord.Embed(
+            title="\u274c Verificación cancelada",
+            description=f"La verificación de {self.member.mention} (`{self.roblox_username}`) fue cancelada por {interaction.user.mention}.",
+            color=discord.Color.red()
+        )
+        await interaction.response.edit_message(embed=embed_cancel, view=None)
+        self.stop()
 
 
 @roblox_verify.error
 async def roblox_verify_error(ctx, error):
     if isinstance(error, commands.MissingRequiredArgument):
-        await ctx.send(f"❌ Uso: `{PREFIX}verify <usuario_roblox> @miembro`")
+        await ctx.send(f"\u274c Uso: `{PREFIX}verify <usuario_roblox> @miembro`")
     elif isinstance(error, commands.MemberNotFound):
-        await ctx.send("❌ Miembro de Discord no encontrado.")
+        await ctx.send("\u274c Miembro de Discord no encontrado.")
     elif isinstance(error, commands.CheckFailure):
-        await ctx.send("🔒 Solo administradores.")
+        await ctx.send("\U0001f512 Solo administradores.")
 
 
 # ── .robloxcheck @usuario ──────────────────────────────────────
